@@ -1,0 +1,10 @@
+E1: n= 7141 1X2 mod 1.06163 mkt 1.03716 delta +0.02447 | O/U delta +0.01217 [1159s]
+E2: n= 6970 1X2 mod 1.06085 mkt 1.03143 delta +0.02943 | O/U delta +0.01767 [1575s]
+SC0: n= 2883 1X2 mod 0.97871 mkt 0.95677 delta +0.02194 | O/U delta +0.01287 [191s]
+SC2: n= 2192 1X2 mod 1.03297 mkt 0.99652 delta +0.03645 | O/U delta +0.02645 [393s]
+E3: n= 7014 1X2 mod 1.08425 mkt 1.05476 delta +0.02950 | O/U delta +0.01748 [1547s]
+I2: n= 5341 1X2 mod 1.07804 mkt 1.04867 delta +0.02937 | O/U delta +0.02355 [1177s]
+G1: n= 2603 1X2 mod 0.96035 mkt 0.92493 delta +0.03542 | O/U delta +0.02008 [346s]
+SP2: n= 5939 1X2 mod 1.06895 mkt 1.03925 delta +0.02970 | O/U delta +0.01905 [1232s]
+
+AGGREGATO n=40083 1X2 delta +0.02883 | O/U delta +0.01794

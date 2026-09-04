@@ -1,0 +1,38 @@
+PENGWIN - FASE 2: MODELLO CON xG REALI (29/08/2026)
+
+Dati: 21.633 partite Top 5, 2014-2026, xG Understat + quote di CHIUSURA football-data.
+Benchmark: quote di chiusura Pinnacle de-marginate (margine mediano 2,40%).
+Modello: Dixon-Coles su obiettivo misto 35% gol + 65% xG, walk-forward puro,
+ristima ogni 14 giorni, finestra 3 anni, decadimento xi=0,0018.
+
+TARATURA DEL PESO (validazione 2017-2019, Premier + Serie A, n=2.090)
+   w=1,00 (solo gol)   delta +0,02974
+   w=0,60              delta +0,01959
+   w=0,30              delta +0,01874   <- migliore
+   w=0,00 (solo xG)    delta +0,02093
+   -> gli xG chiudono il 37% del divario col mercato
+
+TEST FUORI CAMPIONE (2020-2025, tutte e 5 le leghe)
+  lega      n   modello  Pinnacle     delta
+    D1   1663   0.99065   0.97407  +0.01658
+    E0   2165   0.97520   0.95680  +0.01840
+    F1   1890   1.00522   0.98568  +0.01954
+    I1   2176   0.98211   0.96119  +0.02091
+   SP1   2127   0.98237   0.96740  +0.01497
+   TOT  10021   0.98645   0.96832  +0.01813
+
+INFORMAZIONE INCREMENTALE: peso ottimo del modello in combinazione
+   1X2 vs Pinnacle chiusura ......... w* = 0,000   (coeff. libero b = -0,038)
+   Over/Under 2.5 vs media mercato .. w* = 0,000
+
+ROI alle quote MASSIME di chiusura (meta' fuori campione)
+   soglia  2%:  6.828 giocate   -6,35%
+   soglia  5%:  5.730 giocate   -6,99%
+   soglia 10%:  4.298 giocate  -10,25%
+   soglia 20%:  2.449 giocate  -12,31%
+   riferimento a caso: -2,33%
+
+CONCLUSIONE
+Gli xG migliorano il modello in modo sostanziale e verificabile, ma non gli danno
+informazione che il mercato non abbia gia'. Il ROI peggiora al crescere dell'edge
+apparente: la firma dell'assenza di vantaggio, invariata rispetto alla Fase 1.
