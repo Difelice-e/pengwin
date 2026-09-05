@@ -1,0 +1,65 @@
+name: Pengwin — aggiornamento e contabilizzazione
+
+# Sostituisce l'attivita' pianificata quotidiana di Claude.
+# Fa lo stesso lavoro, negli stessi comandi: scarica risultati e xG, li carica
+# su Supabase, contabilizza le giocate concluse. Non genera piu' la dashboard:
+# la pagina live legge il database direttamente a ogni apertura.
+#
+# NON registra mai un turno: `predict.py --registra` sta nel workflow separato
+# `pengwin-turno.yml`, che gira il venerdi'. Separati perche' questo qui e'
+# ripetibile senza conseguenze, mentre quello scrive cose irreversibili.
+
+on:
+  schedule:
+    # 06:00 UTC = 08:00 in Italia d'estate, 07:00 d'inverno (il cron di GitHub
+    # e' sempre UTC e non segue l'ora legale).
+    - cron: '0 6 * * *'
+  workflow_dispatch:        # permette di lanciarlo a mano dalla tab Actions
+
+concurrency:
+  group: pengwin-pipeline   # due esecuzioni sovrapposte scriverebbero insieme
+  cancel-in-progress: false
+
+jobs:
+  aggiorna:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: cloud
+
+    env:
+      SUPABASE_URL: https://cshlvcfahevvdcdjlola.supabase.co
+      SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: cloud/requirements.txt
+
+      - name: Installa le dipendenze
+        run: pip install -r requirements.txt
+
+      - name: Controlla che la chiave sia configurata
+        run: |
+          if [ -z "$SUPABASE_KEY" ]; then
+            echo "::error::Il secret SUPABASE_KEY non e' configurato."
+            echo "Impostalo in Settings -> Secrets and variables -> Actions."
+            exit 1
+          fi
+
+      - name: Risultati e quote (football-data)
+        run: python -m src.ingest.football_data --stagioni 2627 --fixtures --carica
+
+      - name: xG (Understat)
+        run: python -m src.ingest.understat --stagioni 2026 --carica
+
+      # settle non tocca mai una giocata gia' contabilizzata: e' rilanciabile.
+      # Gira solo se entrambi gli ingest sono riusciti, altrimenti
+      # contabilizzerebbe su risultati non aggiornati.
+      - name: Contabilizza le giocate concluse
+        run: python -m src.report.settle --scrivi

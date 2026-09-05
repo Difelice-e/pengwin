@@ -62,10 +62,18 @@ def kelly(p: float, o: float) -> float:
     return max(0.0, (p * o - 1.0) / b) if b > 0 else 0.0
 
 
+MAX_ETA = 10          # giorni oltre i quali i dati di un campionato sono "vecchi"
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--registra", action="store_true")
     ap.add_argument("--bankroll", type=float, default=BANKROLL0)
+    ap.add_argument("--consenti-dati-vecchi", action="store_true",
+                    dest="consenti_dati_vecchi",
+                    help="registra anche con campionati fermi da oltre "
+                         f"{MAX_ETA} giorni. Scelta deliberata di una persona: "
+                         "annotare il turno come degradato nel runbook.")
     a = ap.parse_args(argv)
 
     db = client()
@@ -76,10 +84,36 @@ def main(argv=None) -> int:
 
     models = build_models(d, asof)
     print("modelli stimati:")
+    vecchi = []
     for k, v in models.items():
         eta = (asof - v[4]).days
-        avviso = "  <-- DATI VECCHI" if eta > 10 else ""
+        if eta > MAX_ETA:
+            vecchi.append((k, v[4].date(), eta))
+        avviso = "  <-- DATI VECCHI" if eta > MAX_ETA else ""
         print(f"  {k:<4} {v[2]:>4} partite, ultima {v[4].date()} ({eta} giorni fa){avviso}")
+
+    # Il controllo sui dati vecchi e' un RIFIUTO del programma, non un avviso da
+    # leggere. Prima stava nel prompt di un'attivita' pianificata: qualcuno
+    # doveva guardare l'output e decidere di fermarsi. Un turno registrato non
+    # si annulla (le previsioni sono immutabili), quindi la condizione pericolosa
+    # deve bloccare la scrittura da sola, senza dipendere da chi legge.
+    # E' l'errore che ha viziato il turno del 4 settembre 2026: Bundesliga ferma
+    # al 16 maggio, previsioni calcolate lo stesso.
+    if a.registra and vecchi and not a.consenti_dati_vecchi:
+        print("\n[!] RIFIUTATO: dati fermi da oltre "
+              f"{MAX_ETA} giorni in {len(vecchi)} campionat"
+              f"{'o' if len(vecchi) == 1 else 'i'}:")
+        for k, ultima, eta in vecchi:
+            print(f"      {k}: ultima partita {ultima} ({eta} giorni fa)")
+        print("    Il modello prevederebbe partite di un campionato di cui non ha")
+        print("    visto le ultime giornate. Nessuna previsione e' stata scritta.")
+        print("    Rilanciare l'ingest; se il buco e' sulla fonte, il turno si salta.")
+        print("    Per registrare comunque, deliberatamente: --consenti-dati-vecchi")
+        return 2
+
+    if a.registra and vecchi and a.consenti_dati_vecchi:
+        print(f"\n[!] --consenti-dati-vecchi: registro nonostante {len(vecchi)} "
+              "campionato/i con dati vecchi. Annotare il turno come degradato.")
 
     if fx.empty:
         print("\nnessun fixture in tabella: lanciare prima l'ingest football_data --fixtures")

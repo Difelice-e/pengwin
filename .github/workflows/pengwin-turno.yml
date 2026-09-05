@@ -1,0 +1,103 @@
+name: Pengwin — registrazione turno
+
+# Registra il turno settimanale. Scrive previsioni e giocate, che sono
+# IRREVERSIBILI: un trigger sul database blocca UPDATE e DELETE, quindi un turno
+# registrato due volte non si annulla.
+#
+# Prima questo lavoro stava in un'attivita' pianificata di Claude, il cui prompt
+# chiedeva di leggere l'output di predict.py e fermarsi se un campionato era
+# segnalato `<-- DATI VECCHI`. Quel controllo ora e' dentro `predict.py`, che
+# rifiuta di scrivere e termina con codice 2. Non dipende piu' da chi legge.
+#
+# Le tre protezioni contro il doppio inserimento, tutte in predict.py:
+#   1. rifiuta se le partite non sono successive all'ultima gia' registrata
+#   2. rifiuta se esiste gia' una giocata con lo stesso turno ISO
+#   3. rifiuta se un campionato ha dati fermi da oltre 10 giorni
+
+on:
+  schedule:
+    # 07:00 UTC del venerdi' = 09:00 in Italia d'estate, 08:00 d'inverno.
+    # Le quote della fonte escono il venerdi' entro le 17:00 UK: se il turno
+    # esce vuoto e' normale, va rilanciato a mano piu' tardi.
+    - cron: '0 7 * * 5'
+  workflow_dispatch:
+    inputs:
+      solo_anteprima:
+        description: "Solo anteprima: esegue tutto SENZA registrare nulla (per collaudare)"
+        type: boolean
+        default: true
+      consenti_dati_vecchi:
+        description: "Registrare anche con campionati fermi da oltre 10 giorni (turno degradato)"
+        type: boolean
+        default: false
+
+concurrency:
+  group: pengwin-pipeline    # non deve sovrapporsi all'aggiornamento quotidiano
+  cancel-in-progress: false
+
+jobs:
+  registra:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: cloud
+
+    env:
+      SUPABASE_URL: https://cshlvcfahevvdcdjlola.supabase.co
+      SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: cloud/requirements.txt
+
+      - name: Installa le dipendenze
+        run: pip install -r requirements.txt
+
+      - name: Controlla che la chiave sia configurata
+        run: |
+          if [ -z "$SUPABASE_KEY" ]; then
+            echo "::error::Il secret SUPABASE_KEY non e' configurato."
+            exit 1
+          fi
+
+      # Dati freschi prima di selezionare: e' il presupposto di tutto il resto.
+      - name: Risultati e quote (football-data)
+        run: python -m src.ingest.football_data --stagioni 2627 --fixtures --carica
+
+      - name: xG (Understat)
+        run: python -m src.ingest.understat --stagioni 2026 --carica
+
+      - name: Contabilizza le giocate concluse
+        run: python -m src.report.settle --scrivi
+
+      # Anteprima sempre, cosi' il log mostra cosa sarebbe stato registrato
+      # anche quando il passo successivo rifiuta.
+      - name: Anteprima del turno
+        run: python -m src.report.predict
+
+      # `solo_anteprima` e' vuoto quando parte il cron, quindi il turno
+      # programmato del venerdi' registra sempre. Vale solo per i lanci a mano.
+      - name: Registra il turno
+        if: inputs.solo_anteprima != true
+        run: |
+          if [ "${{ inputs.consenti_dati_vecchi }}" = "true" ]; then
+            echo "::warning::Deroga attiva: registrazione con dati vecchi consentita."
+            python -m src.report.predict --registra --consenti-dati-vecchi
+          else
+            set +e
+            python -m src.report.predict --registra
+            rc=$?
+            set -e
+            if [ $rc -eq 2 ]; then
+              echo "::error::Turno NON registrato: un campionato ha dati fermi da oltre 10 giorni."
+              echo "Rilancia l'ingest e riprova. Se il buco e' sulla fonte, il turno si salta:"
+              echo "e' un esito legittimo. Per forzare, rilancia a mano spuntando la deroga."
+            fi
+            exit $rc
+          fi

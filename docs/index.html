@@ -1,0 +1,675 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pengwin — Registro dell'esperimento</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--ink);
+  font-family:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  font-size:15px;line-height:1.55;-webkit-font-smoothing:antialiased}
+
+:root{
+  --ground:#F3F5F9; --surface:#FFFFFF; --raise:#FAFBFD;
+  --ink:#171A21; --muted:#59616F; --faint:#8B93A2; --line:#DCE1EA;
+  --accent:#3A4C8C; --accent-soft:#E7EAF6;
+  --pos:#17705F; --neg:#A2413A; --warn:#8E6415;
+  --band-out:rgba(58,76,140,.10); --band-in:rgba(58,76,140,.20);
+}
+@media (prefers-color-scheme:dark){ :root:not([data-theme="light"]){
+  --ground:#0F1219; --surface:#171B24; --raise:#1D222D;
+  --ink:#E7EAF1; --muted:#8F98A8; --faint:#6C7484; --line:#242A35;
+  --accent:#8A9BE0; --accent-soft:#1E2436;
+  --pos:#46B39C; --neg:#E28A80; --warn:#D2A24E;
+  --band-out:rgba(138,155,224,.10); --band-in:rgba(138,155,224,.20);
+}}
+:root[data-theme="dark"]{
+  --ground:#0F1219; --surface:#171B24; --raise:#1D222D;
+  --ink:#E7EAF1; --muted:#8F98A8; --faint:#6C7484; --line:#242A35;
+  --accent:#8A9BE0; --accent-soft:#1E2436;
+  --pos:#46B39C; --neg:#E28A80; --warn:#D2A24E;
+  --band-out:rgba(138,155,224,.10); --band-in:rgba(138,155,224,.20);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--ink);
+  font-family:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  font-size:15px;line-height:1.55;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1080px;margin:0 auto;padding:40px 22px 72px;
+  display:flex;flex-direction:column;gap:34px}
+h1,h2,h3{font-family:Newsreader,Georgia,serif;font-weight:500;text-wrap:balance;margin:0}
+h1{font-size:33px;letter-spacing:-.01em;line-height:1.15}
+h2{font-size:21px;letter-spacing:-.005em}
+.eyebrow{font-size:11px;letter-spacing:.13em;text-transform:uppercase;
+  color:var(--faint);font-weight:600}
+.sub{color:var(--muted);margin:6px 0 0;max-width:66ch}
+header{border-bottom:1px solid var(--line);padding-bottom:26px}
+.head-row{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;flex-wrap:wrap}
+.stamp{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12px;color:var(--faint);
+  text-align:right;line-height:1.7}
+
+/* verdetto: il pezzo che porta il senso della pagina */
+.verdetto{background:var(--surface);border:1px solid var(--line);
+  border-left:3px solid var(--warn);padding:20px 24px;border-radius:2px}
+.verdetto p{margin:8px 0 0;color:var(--muted);max-width:72ch}
+.verdetto strong{color:var(--ink);font-weight:600}
+
+section{display:flex;flex-direction:column;gap:14px}
+.shead{display:flex;align-items:baseline;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.nota{color:var(--muted);font-size:13.5px;max-width:70ch;margin:0}
+
+/* metriche: CLV per primo, e' il criterio dichiarato */
+.metriche{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:1px;
+  background:var(--line);border:1px solid var(--line);border-radius:2px;overflow:hidden}
+.met{background:var(--surface);padding:18px 20px}
+.met .k{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);
+  font-weight:600}
+.met .val{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:27px;
+  font-variant-numeric:tabular-nums;margin-top:7px;letter-spacing:-.02em}
+.met .note{font-size:12.5px;color:var(--muted);margin-top:3px}
+.met.primaria{background:var(--raise)}
+.pos{color:var(--pos)} .neg{color:var(--neg)}
+
+.pannello{background:var(--surface);border:1px solid var(--line);border-radius:2px;
+  padding:20px 22px}
+.chart{width:100%;height:auto;display:block}
+.grid{stroke:var(--line);stroke-width:1}
+.tick{fill:var(--faint);font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:10.5px}
+.banda-est polygon{fill:var(--band-out)}
+.banda-int polygon{fill:var(--band-in)}
+.mediana{fill:none;stroke:var(--accent);stroke-width:1.5;stroke-dasharray:5 4}
+.reale{fill:none;stroke:var(--ink);stroke-width:2.25}
+.pt{fill:var(--ink)}
+.clvpos{stroke:var(--pos);stroke-width:2.5;opacity:.8}
+.clvneg{stroke:var(--neg);stroke-width:2.5;opacity:.8}
+.zero{stroke:var(--ink);stroke-width:1.5}
+.mediaclv{stroke:var(--warn);stroke-width:2;stroke-dasharray:3 3}
+.legenda{display:flex;gap:20px;flex-wrap:wrap;font-size:12.5px;color:var(--muted);
+  margin-top:12px}
+.legenda i{display:inline-block;width:15px;height:3px;margin-right:7px;vertical-align:middle;
+  border-radius:1px}
+
+.tabellone{overflow-x:auto;background:var(--surface);border:1px solid var(--line);
+  border-radius:2px}
+table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:640px}
+th{text-align:left;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--faint);font-weight:600;padding:12px 12px 9px;border-bottom:1px solid var(--line);
+  white-space:nowrap}
+td{padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:baseline}
+tr:last-child td{border-bottom:none}
+td.n,th.n{text-align:right;font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-variant-numeric:tabular-nums;white-space:nowrap}
+td.d{font-family:"IBM Plex Mono",ui-monospace,monospace;color:var(--muted);white-space:nowrap}
+td.m{min-width:210px}
+.v{color:var(--faint)}
+.lega{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:11px;color:var(--muted);
+  background:var(--raise);border:1px solid var(--line);padding:1px 6px;border-radius:2px}
+.sel{font-size:12.5px;color:var(--muted);white-space:nowrap}
+.edge{color:var(--accent)}
+.esito{font-size:11px;letter-spacing:.06em;text-transform:uppercase;font-weight:600;
+  padding:2px 8px;border-radius:2px;border:1px solid}
+.esito.v{color:var(--pos);border-color:var(--pos)}
+.esito.p{color:var(--neg);border-color:var(--neg)}
+.stato{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:14px}
+.freschezza{background:var(--surface);border:1px solid var(--line);border-radius:2px;
+  padding:13px 15px}
+.freschezza .l{font-size:12px;color:var(--muted)}
+.freschezza .d{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:15px;margin-top:3px}
+.freschezza.vecchio{border-color:var(--warn)}
+.freschezza.vecchio .d{color:var(--warn)}
+.vuoto{color:var(--faint);font-style:italic;margin:0}
+
+/* filtri */
+.filtri{background:var(--surface);border:1px solid var(--line);border-radius:2px;
+  padding:15px 18px;display:flex;flex-direction:column;gap:11px}
+.gruppo{display:flex;align-items:baseline;gap:13px;flex-wrap:wrap}
+.glab{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);
+  font-weight:600;min-width:86px;flex-shrink:0}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{font:inherit;font-size:13px;color:var(--muted);background:var(--raise);
+  border:1px solid var(--line);border-radius:2px;padding:3px 10px;cursor:pointer;
+  display:inline-flex;align-items:center;gap:6px;line-height:1.5}
+.chip:hover{border-color:var(--accent);color:var(--ink)}
+.chip.attivo{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);
+  font-weight:600}
+.chip .cnt{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:11px;
+  color:var(--faint);font-weight:400}
+.chip.attivo .cnt{color:var(--accent)}
+.chip.vuoto{opacity:.42}
+.filtro-stato{display:flex;align-items:center;gap:14px;border-top:1px solid var(--line);
+  padding-top:10px;font-size:12.5px;color:var(--muted)}
+#azzera{font:inherit;font-size:12.5px;background:none;border:none;padding:0;cursor:pointer;
+  color:var(--accent);text-decoration:underline;text-underline-offset:2px}
+tr[hidden]{display:none}
+
+footer{border-top:1px solid var(--line);padding-top:20px;color:var(--faint);font-size:12.5px}
+footer p{margin:0 0 6px;max-width:74ch}
+code{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12px;
+  background:var(--raise);border:1px solid var(--line);padding:1px 5px;border-radius:2px}
+@media (max-width:640px){
+  h1{font-size:26px} .wrap{padding:26px 15px 52px;gap:26px}
+  .gruppo{flex-direction:column;align-items:flex-start;gap:6px}
+  .glab{min-width:0}
+}
+
+/* stati di caricamento ed errore: la pagina interroga il database all'apertura */
+#caricamento,#errore{max-width:1080px;margin:0 auto;padding:56px 22px;color:var(--muted)}
+#errore{display:none}
+#errore h2{color:var(--ink);margin-bottom:10px}
+#errore .dett{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12.5px;
+  background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--neg);
+  padding:12px 14px;border-radius:2px;margin-top:14px;white-space:pre-wrap;word-break:break-word}
+.puls{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--accent);
+  margin-right:9px;animation:puls 1.1s ease-in-out infinite}
+@keyframes puls{0%,100%{opacity:.25}50%{opacity:1}}
+@media (prefers-reduced-motion:reduce){.puls{animation:none;opacity:.6}}
+#pagina{display:none}
+.ricarica{font:inherit;font-size:12.5px;background:none;border:none;padding:0;cursor:pointer;
+  color:var(--accent);text-decoration:underline;text-underline-offset:2px}
+</style>
+</head>
+<body>
+
+<div id="caricamento"><span class="puls"></span>lettura del registro dal database…</div>
+
+<div id="errore">
+  <h2>Non riesco a leggere il database</h2>
+  <p>La pagina interroga Supabase all'apertura: se la lettura fallisce non mostra
+  numeri vecchi, perché una dashboard che mostra dati stantii senza dirlo è peggio
+  di una che non mostra niente.</p>
+  <div class="dett" id="errore-dett"></div>
+</div>
+
+<div id="pagina" class="wrap"></div>
+
+<script>
+const URL_DB = "https://cshlvcfahevvdcdjlola.supabase.co";
+const CHIAVE = "sb_publishable_KPLnF6VmHPgBC7uEOA7GyA_AUUffl5D";
+
+const LEGHE = {E0:"Premier League", I1:"Serie A", SP1:"La Liga",
+               D1:"Bundesliga", F1:"Ligue 1"};
+const SEL_IT = {"1X2|1":"1","1X2|X":"X","1X2|2":"2",
+                "OU25|over":"Over 2.5","OU25|under":"Under 2.5",
+                "GG|gg":"Gol","GG|ng":"NoGol"};
+const ORDINE_TIPI = ["1","X","2","Over 2.5","Under 2.5","Gol","NoGol"];
+
+/* ---------------------------------------------------------- utilita' */
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g,
+  c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+function num(v, dec = 2, segno = false) {
+  if (v === null || v === undefined || v === "") return "—";
+  const n = Number(v);
+  if (!isFinite(n)) return "—";
+  return (segno && n >= 0 ? "+" : "") + n.toFixed(dec).replace(".", ",");
+}
+function pct(v, dec = 1, segno = true) {
+  if (v === null || v === undefined) return "—";
+  const n = Number(v) * 100;
+  if (!isFinite(n)) return "—";
+  return (segno && n >= 0 ? "+" : "") + n.toFixed(dec).replace(".", ",") + "%";
+}
+const tipoDi = x => SEL_IT[x.mercato + "|" + x.selezione] || x.selezione;
+function risultatoDi(x) {
+  const n = (x.note || "").trim();
+  return n.toLowerCase().startsWith("risultato") ? n.slice(9).trim() : "";
+}
+const gg = (a, b) => Math.round((a - b) / 86400000);
+
+/* ------------------------------------------------------------ lettura */
+async function leggi(tabella, parametri) {
+  const q = new URLSearchParams(parametri).toString();
+  const r = await fetch(`${URL_DB}/rest/v1/${tabella}?${q}`, {
+    headers: { apikey: CHIAVE, Authorization: "Bearer " + CHIAVE }
+  });
+  if (!r.ok) throw new Error(`${tabella}: HTTP ${r.status} — ${await r.text()}`);
+  return r.json();
+}
+
+// PostgREST tronca a 1000 righe: si pagina finche' arriva una pagina piena.
+async function leggiTutto(tabella, parametri) {
+  const PAG = 1000;
+  let out = [], da = 0;
+  for (;;) {
+    const p = Object.assign({}, parametri, { limit: PAG, offset: da });
+    const b = await leggi(tabella, p);
+    out = out.concat(b);
+    if (b.length < PAG) return out;
+    da += PAG;
+  }
+}
+
+async function raccogli() {
+  const [giocate, prereg, log] = await Promise.all([
+    leggiTutto("giocate", { select: "*", order: "data_partita.asc" }),
+    leggiTutto("preregistrazioni", { select: "chiave,valore" }),
+    leggi("log_esecuzioni", { select: "eseguito_il,job,esito,righe",
+                              order: "eseguito_il.desc", limit: 6 })
+  ]);
+
+  // freschezza: una richiesta per campionato, solo l'ultima partita giocata
+  const fresh = {};
+  await Promise.all(Object.keys(LEGHE).map(async k => {
+    const r = await leggi("partite", {
+      select: "data", lega: "eq." + k, stagione: "eq.2627",
+      order: "data.desc", limit: 1
+    });
+    if (r.length) fresh[k] = r[0].data;
+  }));
+
+  const P = {};
+  prereg.forEach(r => { P[r.chiave] = r.valore; });
+
+  const chiuse = giocate.filter(x => x.esito === "vinta" || x.esito === "persa");
+  const aperte = giocate.filter(x => x.esito === "aperta");
+  const stake = chiuse.reduce((s, x) => s + Number(x.stake), 0);
+  const ritorno = chiuse.reduce((s, x) => s + Number(x.ritorno || 0), 0);
+  const clvs = chiuse.filter(x => x.clv !== null && x.clv !== undefined)
+                     .map(x => Number(x.clv));
+
+  const turni = [...new Set(giocate.map(x => x.turno).filter(Boolean))].sort();
+  const cum = [0];
+  let tot = 0;
+  turni.forEach(t => {
+    chiuse.filter(x => x.turno === t)
+          .forEach(x => { tot += Number(x.ritorno || 0) - Number(x.stake); });
+    cum.push(Math.round(tot * 100) / 100);
+  });
+
+  return {
+    giocate, aperte, chiuse, turni, cum, stake, ritorno,
+    roi: stake ? (ritorno - stake) / stake : null,
+    pnl: ritorno - stake,
+    vinte: chiuse.filter(x => x.esito === "vinta").length,
+    clvs,
+    clv_medio: clvs.length ? clvs.reduce((a, b) => a + b, 0) / clvs.length : null,
+    clv_pos: clvs.filter(c => c > 0).length,
+    esposto: aperte.reduce((s, x) => s + Number(x.stake), 0),
+    band: P.band_esperimento || null,
+    meta: P.meta_esperimento || {},
+    log, fresh,
+    aggiornato: new Date().toLocaleString("it-IT",
+      { day: "2-digit", month: "2-digit", year: "numeric",
+        hour: "2-digit", minute: "2-digit" })
+  };
+}
+
+/* ------------------------------------------------------------ grafici */
+function graficoClv(d) {
+  const c = d.clvs;
+  if (!c.length) return "<p class='vuoto'>nessuna giocata conclusa con quota di chiusura</p>";
+  const W = 720, H = 92, L = 18, R = 18;
+  const lo = Math.min(...c, -0.06), hi = Math.max(...c, 0.06);
+  const X = v => L + (W - L - R) * ((v - lo) / (hi - lo));
+  const marks = c.map(v =>
+    `<line x1="${X(v).toFixed(1)}" y1="24" x2="${X(v).toFixed(1)}" y2="56" class="${v > 0 ? "clvpos" : "clvneg"}" />`
+  ).join("");
+  const med = c.reduce((a, b) => a + b, 0) / c.length;
+  return `<svg viewBox="0 0 ${W} ${H}" class="chart" role="img"
+    aria-label="Distribuzione del CLV per giocata conclusa">
+  <line x1="${L}" y1="40" x2="${W - R}" y2="40" class="grid" />
+  ${marks}
+  <line x1="${X(0).toFixed(1)}" y1="16" x2="${X(0).toFixed(1)}" y2="64" class="zero" />
+  <text x="${X(0).toFixed(1)}" y="80" class="tick" text-anchor="middle">0</text>
+  <line x1="${X(med).toFixed(1)}" y1="20" x2="${X(med).toFixed(1)}" y2="60" class="mediaclv" />
+  <text x="${W - R}" y="14" class="tick" text-anchor="end">media ${pct(med)}</text>
+  <text x="${L}" y="14" class="tick" text-anchor="start">quota peggiore della chiusura</text>
+  <text x="${W - R}" y="80" class="tick" text-anchor="end">quota migliore</text>
+</svg>`;
+}
+
+function graficoBanda(d) {
+  const b = d.band;
+  if (!b) return "<p class='vuoto'>banda pre-registrata non disponibile</p>";
+  const W = 720, H = 312, L = 58, R = 18, T = 18, B = 34;
+  const rounds = b.rounds;
+  const lo = Math.min(...b.p2_5) * 1.05, hi = Math.max(...b.p97_5) * 1.15;
+  const X = i => L + (W - L - R) * (i / Math.max(...rounds));
+  const Y = v => T + (H - T - B) * (1 - (v - lo) / (hi - lo));
+  const area = (sup, inf) => {
+    const p = sup.map((v, i) => `${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join(" ");
+    const q = inf.map((v, i) => [i, v]).reverse()
+                 .map(([i, v]) => `${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join(" ");
+    return `<polygon points="${p} ${q}" />`;
+  };
+  const linea = b.p50.map((v, i) => `${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join(" ");
+  const reale = d.cum.map((v, i) => `${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join(" ");
+  const punti = d.cum.map((v, i) =>
+    `<circle cx="${X(i).toFixed(1)}" cy="${Y(v).toFixed(1)}" r="4" class="pt" />`).join("");
+  let ticks = "", passo = 60, v = Math.floor(lo / passo) * passo;
+  while (v <= hi) {
+    ticks += `<line x1="${L}" y1="${Y(v).toFixed(1)}" x2="${W - R}" y2="${Y(v).toFixed(1)}" class="grid" />` +
+             `<text x="${L - 8}" y="${(Y(v) + 4).toFixed(1)}" class="tick" text-anchor="end">${v >= 0 ? "+" : ""}${v}</text>`;
+    v += passo;
+  }
+  const xlab = rounds.map(i =>
+    `<text x="${X(i).toFixed(1)}" y="${H - 12}" class="tick" text-anchor="middle">${i}</text>`).join("");
+  return `<svg viewBox="0 0 ${W} ${H}" class="chart" role="img"
+    aria-label="Banda di simulazione pre-registrata e andamento reale del P&amp;L">
+  ${ticks}
+  <g class="banda-est">${area(b.p97_5, b.p2_5)}</g>
+  <g class="banda-int">${area(b.p75, b.p25)}</g>
+  <polyline points="${linea}" class="mediana" />
+  <polyline points="${reale}" class="reale" />
+  ${punti}${xlab}
+  <text x="${((L + W - R) / 2).toFixed(0)}" y="${H - 1}" class="tick" text-anchor="middle">turni conclusi</text>
+</svg>`;
+}
+
+/* ------------------------------------------------------------ tabelle */
+function rigaAperta(x) {
+  return `<tr data-lega="${esc(x.lega)}" data-tipo="${esc(tipoDi(x))}">
+ <td class="d">${esc(x.data_partita.slice(8, 10))}/${esc(x.data_partita.slice(5, 7))}</td>
+ <td><span class="lega">${esc(x.lega)}</span></td>
+ <td class="m">${esc(x.casa)} <span class="v">–</span> ${esc(x.trasferta)}</td>
+ <td><span class="sel">${esc(tipoDi(x))}</span></td>
+ <td class="n">${num(x.prob_modello, 3)}</td>
+ <td class="n">${num(x.quota)}</td>
+ <td class="n edge">${pct(x.edge)}</td>
+ <td class="n">${num(x.stake)}</td></tr>`;
+}
+
+function rigaChiusa(x) {
+  const vinta = x.esito === "vinta";
+  const pnl = Number(x.ritorno || 0) - Number(x.stake);
+  const clv = x.clv;
+  const cls = (clv === null || clv === undefined || Number(clv) === 0)
+    ? "" : (Number(clv) > 0 ? "pos" : "neg");
+  return `<tr data-lega="${esc(x.lega)}" data-tipo="${esc(tipoDi(x))}">
+ <td class="d">${esc(x.data_partita.slice(8, 10))}/${esc(x.data_partita.slice(5, 7))}</td>
+ <td><span class="lega">${esc(x.lega)}</span></td>
+ <td class="m">${esc(x.casa)} <span class="v">–</span> ${esc(x.trasferta)}</td>
+ <td><span class="sel">${esc(tipoDi(x))}</span></td>
+ <td class="n">${num(x.quota)}</td>
+ <td class="n">${x.quota_chiusura ? num(x.quota_chiusura) : "—"}</td>
+ <td class="n ${cls}">${clv !== null && clv !== undefined ? pct(clv) : "—"}</td>
+ <td class="n ris">${esc(risultatoDi(x)) || "—"}</td>
+ <td><span class="esito ${vinta ? "v" : "p"}">${vinta ? "vinta" : "persa"}</span></td>
+ <td class="n ${pnl > 0 ? "pos" : "neg"}">${num(pnl, 2, true)}</td></tr>`;
+}
+
+function barraFiltri(d) {
+  const tutte = d.aperte.concat(d.chiuse);
+  const nLega = {}, nTipo = {};
+  tutte.forEach(x => {
+    nLega[x.lega] = (nLega[x.lega] || 0) + 1;
+    nTipo[tipoDi(x)] = (nTipo[tipoDi(x)] || 0) + 1;
+  });
+  const chip = (g, v, testo, n) =>
+    `<button type="button" class="chip${n === 0 ? " vuoto" : ""}" data-gruppo="${g}" ` +
+    `data-val="${esc(v)}">${esc(testo)}` +
+    (n === undefined ? "" : ` <span class="cnt">${n}</span>`) + `</button>`;
+
+  const stato = chip("stato", "tutte", "Tutte") +
+                chip("stato", "aperte", "In corso", d.aperte.length) +
+                chip("stato", "chiuse", "Concluse", d.chiuse.length);
+  const leghe = chip("lega", "", "Tutti") +
+                Object.entries(LEGHE).map(([k, v]) => chip("lega", k, v, nLega[k] || 0)).join("");
+  const presenti = ORDINE_TIPI.filter(t => t in nTipo)
+    .concat(Object.keys(nTipo).filter(t => !ORDINE_TIPI.includes(t)));
+  const tipi = chip("tipo", "", "Tutte") +
+               presenti.map(t => chip("tipo", t, t, nTipo[t])).join("");
+
+  return `<div class="filtri" id="filtri">
+  <div class="gruppo"><span class="glab">Stato</span><div class="chips">${stato}</div></div>
+  <div class="gruppo"><span class="glab">Campionato</span><div class="chips">${leghe}</div></div>
+  <div class="gruppo"><span class="glab">Giocata</span><div class="chips">${tipi}</div></div>
+  <div class="filtro-stato">
+    <span id="conteggio">tutte le ${tutte.length} giocate</span>
+    <button type="button" id="azzera" hidden>azzera i filtri</button>
+  </div>
+</div>`;
+}
+
+/* -------------------------------------------------------------- pagina */
+function costruisci(d) {
+  const clvNeg = d.clv_medio !== null && d.clv_medio < 0;
+  const verdetto = clvNeg
+    ? `Il CLV medio è negativo: sulle giocate concluse la quota ottenuta era in media
+       <strong>peggiore</strong> di quella a cui il mercato ha chiuso. È il segnale che il par. 6
+       della specifica indica come precoce e affidabile, e per ora dice che non c'è vantaggio.
+       Il ROI qui sotto non lo smentisce: su poche decine di giocate è rumore.`
+    : `Il CLV medio è positivo: la quota ottenuta era in media migliore della chiusura.
+       Su ${d.clvs.length} giocate resta un indizio, non una prova — ma è il primo segnale
+       che varrebbe la pena veder tenere.`;
+
+  const oggi = new Date(new Date().toDateString());
+  const fresche = Object.entries(LEGHE).map(([k, nome]) => {
+    const dt = d.fresh[k];
+    if (!dt) return `<div class="freschezza"><div class="l">${nome}</div>
+      <div class="d">—</div><div class="l">nessun dato</div></div>`;
+    const g = gg(oggi, new Date(dt + "T00:00:00"));
+    const nota = g === 0 ? "oggi" : g === 1 ? "ieri" : g + " giorni fa";
+    return `<div class="freschezza${g > 10 ? " vecchio" : ""}">
+      <div class="l">${nome}</div>
+      <div class="d">${dt.slice(8, 10)}/${dt.slice(5, 7)}</div>
+      <div class="l">${nota}</div></div>`;
+  }).join("");
+
+  const log = d.log.map(x =>
+    `<tr><td class="d">${esc(String(x.eseguito_il).slice(0, 16).replace("T", " "))}</td>
+     <td><code>${esc(x.job)}</code></td><td>${esc(x.esito)}</td>
+     <td class="n">${x.righe === null || x.righe === undefined ? "—" : esc(x.righe)}</td></tr>`
+  ).join("");
+
+  const aperte = d.aperte.slice().sort((a, b) => a.data_partita.localeCompare(b.data_partita))
+                          .map(rigaAperta).join("");
+  const chiuse = d.chiuse.slice().sort((a, b) => b.data_partita.localeCompare(a.data_partita))
+                          .map(rigaChiusa).join("");
+  const bank = Number(d.meta.bankroll0 || 1000);
+
+  return `
+<header>
+  <div class="head-row">
+    <div>
+      <div class="eyebrow">Bankroll simulato · Top 5 europee</div>
+      <h1>Registro dell'esperimento</h1>
+      <p class="sub">Modello Dixon-Coles su obiettivo misto 35% gol / 65% xG. Ogni previsione è
+      registrata prima dell'evento e non è più modificabile.</p>
+    </div>
+    <div class="stamp">letto dal database<br>${d.aggiornato}<br>
+      <button class="ricarica" id="ricarica">rileggi</button></div>
+  </div>
+</header>
+
+<div class="verdetto">
+  <div class="eyebrow">Come leggere questa pagina</div>
+  <p>${verdetto}</p>
+</div>
+
+<section>
+  <div class="shead"><h2>Le due misure, in ordine di peso</h2></div>
+  <div class="metriche">
+    <div class="met primaria">
+      <div class="k">CLV medio</div>
+      <div class="val ${clvNeg ? "neg" : "pos"}">${pct(d.clv_medio)}</div>
+      <div class="note">positivo su ${d.clv_pos}/${d.clvs.length} giocate · criterio primario</div>
+    </div>
+    <div class="met">
+      <div class="k">ROI</div>
+      <div class="val ${(d.roi || 0) > 0 ? "pos" : "neg"}">${pct(d.roi)}</div>
+      <div class="note">su ${d.chiuse.length} concluse · campione troppo piccolo</div>
+    </div>
+    <div class="met">
+      <div class="k">P&amp;L</div>
+      <div class="val ${d.pnl > 0 ? "pos" : "neg"}">${num(d.pnl, 2, true)} €</div>
+      <div class="note">volume ${num(d.stake)} € su bankroll ${num(bank, 0)} €</div>
+    </div>
+    <div class="met">
+      <div class="k">In corso</div>
+      <div class="val">${d.aperte.length}</div>
+      <div class="note">${num(d.esposto)} € esposti</div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="shead"><h2>CLV, giocata per giocata</h2></div>
+  <p class="nota">Ogni tratto è una giocata conclusa: quanto la quota presa era migliore (verde,
+  a destra dello zero) o peggiore (rossa) della quota di chiusura sullo stesso esito. Non dipende
+  da come è finita la partita, e per questo è informativo molto prima del ROI.</p>
+  <div class="pannello">${graficoClv(d)}</div>
+</section>
+
+<section>
+  <div class="shead"><h2>Andamento contro la banda pre-registrata</h2></div>
+  <p class="nota">La banda è stata calcolata <em>prima</em> di iniziare, simulando l'esperimento
+  sotto l'ipotesi di assenza di vantaggio: è il metro di paragone, e non viene mai ricalcolata.
+  La linea continua è l'andamento reale. Restare dentro la banda non prova nulla — uscirne in alto,
+  e restarci, sarebbe la prima cosa interessante.</p>
+  <div class="pannello">
+    ${graficoBanda(d)}
+    <div class="legenda">
+      <span><i style="background:var(--ink)"></i>andamento reale</span>
+      <span><i style="background:var(--accent)"></i>mediana attesa senza vantaggio</span>
+      <span><i style="background:var(--band-in)"></i>50% centrale</span>
+      <span><i style="background:var(--band-out)"></i>95% centrale</span>
+      <span>probabilità di chiudere in utile senza vantaggio: ${num(d.band ? d.band.p_profit : 0, 1)}%</span>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="shead"><h2>Le giocate</h2></div>
+  <p class="nota">I filtri cambiano solo che cosa è in tabella. CLV e ROI qui sopra restano quelli
+  dell'esperimento intero: su ${d.chiuse.length} giocate concluse, un CLV per singolo campionato
+  poggerebbe su una manciata di righe e non direbbe nulla.</p>
+  ${barraFiltri(d)}
+</section>
+
+<section id="sez-aperte">
+  <div class="shead"><h2>Giocate in corso</h2><span class="stamp conta">${d.aperte.length} in corso</span></div>
+  <div class="tabellone"><table>
+    <thead><tr><th>Data</th><th>Lega</th><th>Partita</th><th>Giocata</th>
+      <th class="n">p</th><th class="n">Quota</th><th class="n">Edge</th><th class="n">Punta €</th></tr></thead>
+    <tbody>${aperte || '<tr><td colspan="8" class="vuoto">nessuna giocata aperta</td></tr>'}
+      <tr class="nessuna" hidden><td colspan="8" class="vuoto">nessuna giocata in corso con questi filtri</td></tr></tbody>
+  </table></div>
+</section>
+
+<section id="sez-chiuse">
+  <div class="shead"><h2>Giocate concluse</h2><span class="stamp conta">${d.chiuse.length} concluse</span></div>
+  <div class="tabellone"><table>
+    <thead><tr><th>Data</th><th>Lega</th><th>Partita</th><th>Giocata</th>
+      <th class="n">Presa</th><th class="n">Chiusura</th><th class="n">CLV</th><th class="n">Finita</th>
+      <th>Esito</th><th class="n">P&amp;L €</th></tr></thead>
+    <tbody>${chiuse || '<tr><td colspan="10" class="vuoto">nessuna giocata conclusa</td></tr>'}
+      <tr class="nessuna" hidden><td colspan="10" class="vuoto">nessuna giocata conclusa con questi filtri</td></tr></tbody>
+  </table></div>
+</section>
+
+<section>
+  <div class="shead"><h2>Stato dei dati</h2></div>
+  <p class="nota">Ultima partita presente in archivio per campionato. Un campionato fermo da più di
+  dieci giorni viene evidenziato: il modello lo starebbe prevedendo senza aver visto le ultime
+  giornate.</p>
+  <div class="stato">${fresche}</div>
+  <div class="tabellone" style="margin-top:6px"><table>
+    <thead><tr><th>Quando</th><th>Procedura</th><th>Esito</th><th class="n">Righe</th></tr></thead>
+    <tbody>${log}</tbody>
+  </table></div>
+</section>
+
+<footer>
+  <p>Esperimento a bankroll simulato: nessuna somma reale è impegnata. Le regole (banda di edge
+  2–10%, Kelly 1/4, cap 1% per giocata, massimo 25 giocate a turno) sono fissate nel runbook e non
+  vengono modificate a esperimento in corso.</p>
+  <p>Dati: football-data.co.uk per risultati e quote, Understat per gli xG. Il benchmark è la quota
+  massima di chiusura; Pinnacle non è più pubblicato dal 2026/27.</p>
+  <p>Questa pagina legge Supabase in sola lettura a ogni apertura: non c'è una copia da rigenerare,
+  e quindi non c'è una copia che possa restare indietro.</p>
+</footer>`;
+}
+
+/* -------------------------------------------------------------- filtri */
+function attivaFiltri() {
+  const barra = document.getElementById("filtri");
+  if (!barra) return;
+  let sel = { stato: "tutte", lega: "", tipo: "" };
+  const sezioni = { aperte: document.getElementById("sez-aperte"),
+                    chiuse: document.getElementById("sez-chiuse") };
+
+  function applica() {
+    let visti = 0;
+    ["aperte", "chiuse"].forEach(k => {
+      const sez = sezioni[k];
+      if (!sez) return;
+      const mostraSez = (sel.stato === "tutte" || sel.stato === k);
+      sez.hidden = !mostraSez;
+      let n = 0;
+      sez.querySelectorAll("tbody tr[data-lega]").forEach(tr => {
+        const ok = (!sel.lega || tr.dataset.lega === sel.lega) &&
+                   (!sel.tipo || tr.dataset.tipo === sel.tipo);
+        tr.hidden = !ok;
+        if (ok) n++;
+      });
+      const vuoto = sez.querySelector(".nessuna");
+      if (vuoto) vuoto.hidden = (n > 0);
+      const cnt = sez.querySelector(".conta");
+      if (cnt) cnt.textContent = n + (k === "aperte" ? " in corso" : " concluse");
+      if (mostraSez) visti += n;
+    });
+
+    const filtra = (sel.stato !== "tutte" || sel.lega || sel.tipo);
+    const et = document.getElementById("conteggio");
+    if (et) et.textContent = filtra
+      ? (visti === 1 ? "1 giocata in vista" : visti + " giocate in vista")
+      : "tutte le " + visti + " giocate";
+    const az = document.getElementById("azzera");
+    if (az) az.hidden = !filtra;
+
+    barra.querySelectorAll(".chip").forEach(b => {
+      const attivo = sel[b.dataset.gruppo] === b.dataset.val;
+      b.classList.toggle("attivo", attivo);
+      b.setAttribute("aria-pressed", attivo ? "true" : "false");
+    });
+  }
+
+  barra.addEventListener("click", ev => {
+    const b = ev.target.closest(".chip");
+    if (b) {
+      const g = b.dataset.gruppo, v = b.dataset.val;
+      sel[g] = (sel[g] === v && g !== "stato") ? "" : v;
+      applica();
+      return;
+    }
+    if (ev.target.id === "azzera") {
+      sel = { stato: "tutte", lega: "", tipo: "" };
+      applica();
+    }
+  });
+
+  applica();
+}
+
+/* --------------------------------------------------------------- avvio */
+async function avvia() {
+  const car = document.getElementById("caricamento");
+  const err = document.getElementById("errore");
+  const pag = document.getElementById("pagina");
+  // display esplicito: "" ricadrebbe sulla regola del foglio di stile (none)
+  car.style.display = "block";
+  err.style.display = "none";
+  pag.style.display = "none";
+  try {
+    const d = await raccogli();
+    pag.innerHTML = costruisci(d);
+    car.style.display = "none";
+    pag.style.display = "flex";   // .wrap e' un flex column
+    attivaFiltri();
+    const r = document.getElementById("ricarica");
+    if (r) r.addEventListener("click", avvia);
+  } catch (e) {
+    car.style.display = "none";
+    document.getElementById("errore-dett").textContent = String(e && e.message || e);
+    err.style.display = "block";
+  }
+}
+
+avvia();
+</script>
+</body>
+</html>
