@@ -155,12 +155,23 @@ def grafico_clv(d: dict) -> str:
 
 
 # ---------------------------------------------------------------- tabelle
+def tipo(x) -> str:
+    """Etichetta della selezione. E' anche il valore su cui filtra la pagina."""
+    return SEL_IT.get((x["mercato"], x["selezione"]), x["selezione"])
+
+
+def risultato(x) -> str:
+    """Il punteggio finale e' annotato in `note` nella forma 'risultato 1-3'."""
+    n = (x.get("note") or "").strip()
+    return n[len("risultato"):].strip() if n.lower().startswith("risultato") else ""
+
+
 def riga_aperta(x) -> str:
-    return f'''<tr>
+    return f'''<tr data-lega="{e(x["lega"])}" data-tipo="{e(tipo(x))}">
  <td class="d">{e(x["data_partita"][8:10])}/{e(x["data_partita"][5:7])}</td>
  <td><span class="lega">{e(x["lega"])}</span></td>
  <td class="m">{e(x["casa"])} <span class="v">–</span> {e(x["trasferta"])}</td>
- <td><span class="sel">{e(SEL_IT.get((x["mercato"], x["selezione"]), x["selezione"]))}</span></td>
+ <td><span class="sel">{e(tipo(x))}</span></td>
  <td class="n">{num(x["prob_modello"], 3)}</td>
  <td class="n">{num(x["quota"])}</td>
  <td class="n edge">{pct(x["edge"])}</td>
@@ -171,17 +182,126 @@ def riga_chiusa(x) -> str:
     vinta = x["esito"] == "vinta"
     pnl = float(x["ritorno"] or 0) - float(x["stake"])
     clv = x["clv"]
-    cls = "pos" if (clv is not None and float(clv) > 0) else "neg" if clv is not None else ""
-    return f'''<tr>
+    # zero non e' un CLV negativo: quota presa e chiusura coincidono, non si colora
+    cls = "" if clv is None or float(clv) == 0 else ("pos" if float(clv) > 0 else "neg")
+    return f'''<tr data-lega="{e(x["lega"])}" data-tipo="{e(tipo(x))}">
  <td class="d">{e(x["data_partita"][8:10])}/{e(x["data_partita"][5:7])}</td>
  <td><span class="lega">{e(x["lega"])}</span></td>
  <td class="m">{e(x["casa"])} <span class="v">–</span> {e(x["trasferta"])}</td>
- <td><span class="sel">{e(SEL_IT.get((x["mercato"], x["selezione"]), x["selezione"]))}</span></td>
+ <td><span class="sel">{e(tipo(x))}</span></td>
  <td class="n">{num(x["quota"])}</td>
  <td class="n">{num(x["quota_chiusura"]) if x["quota_chiusura"] else "—"}</td>
  <td class="n {cls}">{pct(clv) if clv is not None else "—"}</td>
+ <td class="n ris">{e(risultato(x)) or "—"}</td>
  <td><span class="esito {'v' if vinta else 'p'}">{'vinta' if vinta else 'persa'}</span></td>
  <td class="n {'pos' if pnl > 0 else 'neg'}">{num(pnl, 2, True)}</td></tr>'''
+
+
+def barra_filtri(d: dict) -> str:
+    """Filtri per stato, campionato e tipo di giocata.
+
+    Deliberatamente NON ricalcolano CLV e ROI del riquadro in alto: su 26 giocate
+    concluse, un CLV per singolo campionato sarebbe costruito su 3-8 righe e non
+    direbbe nulla. La pagina mostra quante righe sono in vista, non una metrica
+    nuova per ogni combinazione di filtri.
+    """
+    tutte = d["aperte"] + d["chiuse"]
+    n_lega, n_tipo = {}, {}
+    for x in tutte:
+        n_lega[x["lega"]] = n_lega.get(x["lega"], 0) + 1
+        n_tipo[tipo(x)] = n_tipo.get(tipo(x), 0) + 1
+
+    def chip(gruppo, val, testo, n=None):
+        vuoto = " vuoto" if n == 0 else ""
+        cnt = f' <span class="cnt">{n}</span>' if n is not None else ""
+        return (f'<button type="button" class="chip{vuoto}" data-gruppo="{gruppo}" '
+                f'data-val="{e(val)}">{e(testo)}{cnt}</button>')
+
+    stato = "".join([chip("stato", "tutte", "Tutte"),
+                     chip("stato", "aperte", "In corso", len(d["aperte"])),
+                     chip("stato", "chiuse", "Concluse", len(d["chiuse"]))])
+    leghe = chip("lega", "", "Tutti") + "".join(
+        chip("lega", k, v, n_lega.get(k, 0)) for k, v in LEGHE.items())
+    ordine = ["1", "X", "2", "Over 2.5", "Under 2.5", "Gol", "NoGol"]
+    presenti = [t for t in ordine if t in n_tipo] + [t for t in n_tipo if t not in ordine]
+    tipi = chip("tipo", "", "Tutte") + "".join(chip("tipo", t, t, n_tipo[t]) for t in presenti)
+
+    return f'''<div class="filtri" id="filtri">
+  <div class="gruppo"><span class="glab">Stato</span><div class="chips">{stato}</div></div>
+  <div class="gruppo"><span class="glab">Campionato</span><div class="chips">{leghe}</div></div>
+  <div class="gruppo"><span class="glab">Giocata</span><div class="chips">{tipi}</div></div>
+  <div class="filtro-stato">
+    <span id="conteggio">tutte le {len(tutte)} giocate</span>
+    <button type="button" id="azzera" hidden>azzera i filtri</button>
+  </div>
+</div>'''
+
+
+SCRIPT = """
+(function () {
+  var barra = document.getElementById('filtri');
+  if (!barra) return;
+  var sel = { stato: 'tutte', lega: '', tipo: '' };
+  var sezioni = { aperte: document.getElementById('sez-aperte'),
+                  chiuse: document.getElementById('sez-chiuse') };
+
+  function applica() {
+    var visti = 0;
+    ['aperte', 'chiuse'].forEach(function (k) {
+      var sez = sezioni[k];
+      if (!sez) return;
+      var mostraSez = (sel.stato === 'tutte' || sel.stato === k);
+      sez.hidden = !mostraSez;
+      var n = 0;
+      var righe = sez.querySelectorAll('tbody tr[data-lega]');
+      Array.prototype.forEach.call(righe, function (tr) {
+        var ok = (!sel.lega || tr.getAttribute('data-lega') === sel.lega) &&
+                 (!sel.tipo || tr.getAttribute('data-tipo') === sel.tipo);
+        tr.hidden = !ok;
+        if (ok) n++;
+      });
+      var vuoto = sez.querySelector('.nessuna');
+      if (vuoto) vuoto.hidden = (n > 0);
+      var cnt = sez.querySelector('.conta');
+      if (cnt) cnt.textContent = n + (k === 'aperte' ? ' in corso' : ' concluse');
+      if (mostraSez) visti += n;
+    });
+
+    var filtra = (sel.stato !== 'tutte' || sel.lega || sel.tipo);
+    var etichetta = document.getElementById('conteggio');
+    if (etichetta) {
+      etichetta.textContent = filtra
+        ? (visti === 1 ? '1 giocata in vista' : visti + ' giocate in vista')
+        : 'tutte le ' + visti + ' giocate';
+    }
+    var azzera = document.getElementById('azzera');
+    if (azzera) azzera.hidden = !filtra;
+
+    Array.prototype.forEach.call(barra.querySelectorAll('.chip'), function (b) {
+      var attivo = sel[b.getAttribute('data-gruppo')] === b.getAttribute('data-val');
+      b.classList.toggle('attivo', attivo);
+      b.setAttribute('aria-pressed', attivo ? 'true' : 'false');
+    });
+  }
+
+  barra.addEventListener('click', function (ev) {
+    var b = ev.target.closest ? ev.target.closest('.chip') : null;
+    if (b) {
+      var g = b.getAttribute('data-gruppo'), v = b.getAttribute('data-val');
+      // riclicca il filtro attivo per toglierlo
+      sel[g] = (sel[g] === v && g !== 'stato') ? '' : v;
+      applica();
+      return;
+    }
+    if (ev.target.id === 'azzera') {
+      sel = { stato: 'tutte', lega: '', tipo: '' };
+      applica();
+    }
+  });
+
+  applica();
+})();
+"""
 
 
 CSS = """
@@ -293,11 +413,39 @@ td.m{min-width:210px}
 .freschezza.vecchio{border-color:var(--warn)}
 .freschezza.vecchio .d{color:var(--warn)}
 .vuoto{color:var(--faint);font-style:italic;margin:0}
+
+/* filtri */
+.filtri{background:var(--surface);border:1px solid var(--line);border-radius:2px;
+  padding:15px 18px;display:flex;flex-direction:column;gap:11px}
+.gruppo{display:flex;align-items:baseline;gap:13px;flex-wrap:wrap}
+.glab{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);
+  font-weight:600;min-width:86px;flex-shrink:0}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{font:inherit;font-size:13px;color:var(--muted);background:var(--raise);
+  border:1px solid var(--line);border-radius:2px;padding:3px 10px;cursor:pointer;
+  display:inline-flex;align-items:center;gap:6px;line-height:1.5}
+.chip:hover{border-color:var(--accent);color:var(--ink)}
+.chip.attivo{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);
+  font-weight:600}
+.chip .cnt{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:11px;
+  color:var(--faint);font-weight:400}
+.chip.attivo .cnt{color:var(--accent)}
+.chip.vuoto{opacity:.42}
+.filtro-stato{display:flex;align-items:center;gap:14px;border-top:1px solid var(--line);
+  padding-top:10px;font-size:12.5px;color:var(--muted)}
+#azzera{font:inherit;font-size:12.5px;background:none;border:none;padding:0;cursor:pointer;
+  color:var(--accent);text-decoration:underline;text-underline-offset:2px}
+tr[hidden]{display:none}
+
 footer{border-top:1px solid var(--line);padding-top:20px;color:var(--faint);font-size:12.5px}
 footer p{margin:0 0 6px;max-width:74ch}
 code{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12px;
   background:var(--raise);border:1px solid var(--line);padding:1px 5px;border-radius:2px}
-@media (max-width:640px){ h1{font-size:26px} .wrap{padding:26px 15px 52px;gap:26px} }
+@media (max-width:640px){
+  h1{font-size:26px} .wrap{padding:26px 15px 52px;gap:26px}
+  .gruppo{flex-direction:column;align-items:flex-start;gap:6px}
+  .glab{min-width:0}
+}
 """
 
 
@@ -417,21 +565,31 @@ def costruisci(d: dict) -> str:
 </section>
 
 <section>
-  <div class="shead"><h2>Giocate in corso</h2><span class="stamp">{len(d["aperte"])} aperte</span></div>
+  <div class="shead"><h2>Le giocate</h2></div>
+  <p class="nota">I filtri cambiano solo che cosa è in tabella. CLV e ROI qui sopra restano quelli
+  dell'esperimento intero: su {len(d["chiuse"])} giocate concluse, un CLV per singolo campionato
+  poggerebbe su una manciata di righe e non direbbe nulla.</p>
+  {barra_filtri(d)}
+</section>
+
+<section id="sez-aperte">
+  <div class="shead"><h2>Giocate in corso</h2><span class="stamp conta">{len(d["aperte"])} in corso</span></div>
   <div class="tabellone"><table>
-    <thead><tr><th>Data</th><th>Lega</th><th>Partita</th><th>Esito</th>
+    <thead><tr><th>Data</th><th>Lega</th><th>Partita</th><th>Giocata</th>
       <th class="n">p</th><th class="n">Quota</th><th class="n">Edge</th><th class="n">Punta €</th></tr></thead>
-    <tbody>{aperte or '<tr><td colspan="8" class="vuoto">nessuna giocata aperta</td></tr>'}</tbody>
+    <tbody>{aperte or '<tr><td colspan="8" class="vuoto">nessuna giocata aperta</td></tr>'}
+      <tr class="nessuna" hidden><td colspan="8" class="vuoto">nessuna giocata in corso con questi filtri</td></tr></tbody>
   </table></div>
 </section>
 
-<section>
-  <div class="shead"><h2>Giocate concluse</h2><span class="stamp">{d["vinte"]} vinte su {len(d["chiuse"])}</span></div>
+<section id="sez-chiuse">
+  <div class="shead"><h2>Giocate concluse</h2><span class="stamp conta">{len(d["chiuse"])} concluse</span></div>
   <div class="tabellone"><table>
-    <thead><tr><th>Data</th><th>Lega</th><th>Partita</th><th>Esito</th>
-      <th class="n">Presa</th><th class="n">Chiusura</th><th class="n">CLV</th><th>Risultato</th>
-      <th class="n">P&amp;L €</th></tr></thead>
-    <tbody>{chiuse or '<tr><td colspan="9" class="vuoto">nessuna giocata conclusa</td></tr>'}</tbody>
+    <thead><tr><th>Data</th><th>Lega</th><th>Partita</th><th>Giocata</th>
+      <th class="n">Presa</th><th class="n">Chiusura</th><th class="n">CLV</th><th class="n">Finita</th>
+      <th>Esito</th><th class="n">P&amp;L €</th></tr></thead>
+    <tbody>{chiuse or '<tr><td colspan="10" class="vuoto">nessuna giocata conclusa</td></tr>'}
+      <tr class="nessuna" hidden><td colspan="10" class="vuoto">nessuna giocata conclusa con questi filtri</td></tr></tbody>
   </table></div>
 </section>
 
@@ -455,7 +613,8 @@ def costruisci(d: dict) -> str:
   massima di chiusura; Pinnacle non è più pubblicato dal 2026/27.</p>
 </footer>
 
-</div>"""
+</div>
+<script>{SCRIPT}</script>"""
 
 
 def main(argv=None) -> int:
