@@ -178,12 +178,14 @@ def main(argv=None) -> int:
             return 2
 
     totale = 0
+    falliti: list[str] = []
     for cod in a.stagioni:
         for lega in a.leghe:
             try:
                 righe = stagione(lega, cod)
             except Exception as e:
                 print(f"[!] {cod}/{lega}: {e}", file=sys.stderr)
+                falliti.append(f"{cod}/{lega}: {e}")
                 continue
             disputate = sum(1 for r in righe if r.get("gol_casa") is not None)
             print(f"{cod}/{lega:<3} {len(righe):>4} partite ({disputate} disputate)")
@@ -201,8 +203,21 @@ def main(argv=None) -> int:
             n = db.upsert("fixtures", fx, on_conflict="lega,data,casa,trasferta")
             print(f"          -> {n} righe su Supabase")
 
+    # Un campionato che non si scarica NON e' un successo parziale da ignorare.
+    # Prima si usciva 0 comunque: l'errore restava una riga `[!]` che qualcuno
+    # doveva leggere. Sotto un esecutore automatico quella riga non la legge
+    # nessuno, e un buco nei dati diventa una spunta verde. E' il caso di
+    # `D1.csv` che il 31/08/2026 rispondeva HTTP 300 perche' non esisteva ancora.
     if db:
-        db.log("ingest_football_data", "ok", totale)
+        db.log("ingest_football_data", "parziale" if falliti else "ok", totale,
+               dettaglio="; ".join(falliti))
+    if falliti:
+        print(f"\n[!] {len(falliti)} scaricament"
+              f"{'o fallito' if len(falliti) == 1 else 'i falliti'}, dati incompleti:",
+              file=sys.stderr)
+        for f in falliti:
+            print(f"      {f}", file=sys.stderr)
+        return 1
     return 0
 
 

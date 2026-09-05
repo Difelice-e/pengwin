@@ -118,12 +118,14 @@ def main(argv=None) -> int:
             return 2
 
     totale = 0
+    falliti: list[str] = []
     for st in a.stagioni:
         for lega in a.leghe:
             try:
                 righe = partite(lega, st)
             except Exception as e:
                 print(f"[!] {lega}/{st}: {e}", file=sys.stderr)
+                falliti.append(f"{lega}/{st}: {e}")
                 continue
             disputate = sum(1 for r in righe if r["disputata"])
             print(f"{st}/{lega:<11} {len(righe):>4} partite ({disputate} disputate)")
@@ -132,8 +134,18 @@ def main(argv=None) -> int:
                 n = db.upsert("xg_partite", righe, on_conflict="understat_id")
                 print(f"                 -> {n} righe su Supabase")
 
+    # Vedi la nota in football_data.py: una lega mancante deve far fallire il
+    # comando, altrimenti sotto un esecutore automatico non se ne accorge nessuno.
     if db:
-        db.log("ingest_understat", "ok", totale)
+        db.log("ingest_understat", "parziale" if falliti else "ok", totale,
+               dettaglio="; ".join(falliti))
+    if falliti:
+        print(f"\n[!] {len(falliti)} scaricament"
+              f"{'o fallito' if len(falliti) == 1 else 'i falliti'}, dati incompleti:",
+              file=sys.stderr)
+        for f in falliti:
+            print(f"      {f}", file=sys.stderr)
+        return 1
     return 0
 
 

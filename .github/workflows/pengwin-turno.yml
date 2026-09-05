@@ -81,10 +81,11 @@ jobs:
       - name: Anteprima del turno
         run: python -m src.report.predict
 
-      # `solo_anteprima` e' vuoto quando parte il cron, quindi il turno
-      # programmato del venerdi' registra sempre. Vale solo per i lanci a mano.
+      # Il turno programmato del venerdi' registra SEMPRE: `solo_anteprima`
+      # esiste solo per i lanci a mano, e la prima condizione lo mette nero su
+      # bianco invece di affidarsi a come Actions valuta un input assente.
       - name: Registra il turno
-        if: inputs.solo_anteprima != true
+        if: github.event_name == 'schedule' || inputs.solo_anteprima != true
         run: |
           if [ "${{ inputs.consenti_dati_vecchi }}" = "true" ]; then
             echo "::warning::Deroga attiva: registrazione con dati vecchi consentita."
