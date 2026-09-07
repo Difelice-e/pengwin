@@ -58,7 +58,9 @@ viene trattato come download). La via che funziona: navigare su una pagina quals
 del dominio, poi fare `fetch` dal contesto della pagina.
 
 ```js
-// mcp__Claude_Browser__navigate  ->  https://www.football-data.co.uk/englandm.php
+// mcp__Claude_Browser__navigate  ->  https://football-data.co.uk/englandm.php
+// (usare l'apex senza www: il vhost `www` è a volte giù — 503 il 06/09/2026 —
+//  mentre l'apex risponde; in caso di non-200 ripiegare su www.football-data.co.uk)
 // poi javascript_tool:
 const urls={E0:'/mmz4281/2627/E0.csv',D1:'/mmz4281/2627/D1.csv',I1:'/mmz4281/2627/I1.csv',
             SP1:'/mmz4281/2627/SP1.csv',F1:'/mmz4281/2627/F1.csv',FX:'/fixtures.csv'};

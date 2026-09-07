@@ -19,7 +19,10 @@ from pathlib import Path
 
 import requests
 
-BASE = "https://www.football-data.co.uk"
+# football-data.co.uk serve l'apex (senza www) da Apache e il vhost `www` da
+# nginx: sono due server diversi e a volte solo uno risponde. Il 06/09/2026 era
+# `www` a dare HTTP 503 mentre l'apex tornava 200 — provati in quest'ordine.
+HOSTS = ("https://football-data.co.uk", "https://www.football-data.co.uk")
 LEGHE = {"E0": "Premier League", "I1": "Serie A", "SP1": "La Liga",
          "D1": "Bundesliga", "F1": "Ligue 1"}
 RAW = Path(__file__).resolve().parents[2] / "data" / "raw"
@@ -91,11 +94,23 @@ def _ora(v: str):
         return None
 
 
-def scarica(url: str) -> str:
-    r = requests.get(url, timeout=TIMEOUT,
-                     headers={"User-Agent": "Mozilla/5.0 (compatible; pengwin/1.0)"})
-    r.raise_for_status()
-    return r.content.decode("utf-8-sig", errors="replace")
+def scarica(path: str) -> str:
+    """Scarica `path` (es. `/fixtures.csv`) provando gli host in ordine.
+
+    Passa al successivo su errore di connessione o risposta non-2xx, cosi' un
+    guasto a un solo vhost non ferma la pipeline. Rilancia l'ultimo errore se
+    nessun host risponde.
+    """
+    ultimo: Exception | None = None
+    for host in HOSTS:
+        try:
+            r = requests.get(host + path, timeout=TIMEOUT,
+                             headers={"User-Agent": "Mozilla/5.0 (compatible; pengwin/1.0)"})
+            r.raise_for_status()
+            return r.content.decode("utf-8-sig", errors="replace")
+        except requests.RequestException as e:
+            ultimo = e
+    raise ultimo if ultimo else RuntimeError("nessun host configurato")
 
 
 def _righe(testo: str):
@@ -114,8 +129,7 @@ def _quote(r: dict) -> dict:
 
 def stagione(lega: str, cod: str, salva=True) -> list[dict]:
     """Scarica una lega/stagione e la normalizza per la tabella `partite`."""
-    url = f"{BASE}/mmz4281/{cod}/{lega}.csv"
-    testo = scarica(url)
+    testo = scarica(f"/mmz4281/{cod}/{lega}.csv")
     if salva:
         RAW.mkdir(parents=True, exist_ok=True)
         (RAW / f"{cod}_{lega}.csv").write_text(testo, encoding="utf-8")
@@ -138,7 +152,7 @@ def stagione(lega: str, cod: str, salva=True) -> list[dict]:
 
 def fixtures(salva=True) -> list[dict]:
     """Partite in programma con quote correnti."""
-    testo = scarica(f"{BASE}/fixtures.csv")
+    testo = scarica("/fixtures.csv")
     if salva:
         RAW.mkdir(parents=True, exist_ok=True)
         (RAW / "fixtures.csv").write_text(testo, encoding="utf-8")
