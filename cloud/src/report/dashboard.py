@@ -198,6 +198,7 @@ def riga_chiusa(x) -> str:
  <td><span class="lega">{e(x["lega"])}</span></td>
  <td class="m">{e(x["casa"])} <span class="v">–</span> {e(x["trasferta"])}</td>
  <td><span class="sel">{e(tipo(x))}</span></td>
+ <td class="n">{num(x["stake"])}</td>
  <td class="n">{num(x["quota"])}</td>
  <td class="n">{num(x["quota_chiusura"]) if x["quota_chiusura"] else "—"}</td>
  <td class="n {cls}">{pct(clv) if clv is not None else "—"}</td>
@@ -599,10 +600,10 @@ def costruisci(d: dict) -> str:
   <div class="shead"><h2>Giocate concluse</h2><span class="stamp conta">{len(d["chiuse"])} concluse</span></div>
   <div class="tabellone"><table>
     <thead><tr><th>Data</th><th>Lega</th><th>Partita</th><th>Giocata</th>
-      <th class="n">Presa</th><th class="n">Chiusura</th><th class="n">CLV</th><th class="n">Finita</th>
+      <th class="n">Punta €</th><th class="n">Presa</th><th class="n">Chiusura</th><th class="n">CLV</th><th class="n">Finita</th>
       <th>Esito</th><th class="n">P&amp;L €</th></tr></thead>
-    <tbody>{chiuse or '<tr><td colspan="10" class="vuoto">nessuna giocata conclusa</td></tr>'}
-      <tr class="nessuna" hidden><td colspan="10" class="vuoto">nessuna giocata conclusa con questi filtri</td></tr></tbody>
+    <tbody>{chiuse or '<tr><td colspan="11" class="vuoto">nessuna giocata conclusa</td></tr>'}
+      <tr class="nessuna" hidden><td colspan="11" class="vuoto">nessuna giocata conclusa con questi filtri</td></tr></tbody>
   </table></div>
 </section>
 

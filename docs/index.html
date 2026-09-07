@@ -392,6 +392,7 @@ function rigaChiusa(x) {
  <td><span class="lega">${esc(x.lega)}</span></td>
  <td class="m">${esc(x.casa)} <span class="v">–</span> ${esc(x.trasferta)}</td>
  <td><span class="sel">${esc(tipoDi(x))}</span></td>
+ <td class="n">${num(x.stake)}</td>
  <td class="n">${num(x.quota)}</td>
  <td class="n">${x.quota_chiusura ? num(x.quota_chiusura) : "—"}</td>
  <td class="n ${cls}">${clv !== null && clv !== undefined ? pct(clv) : "—"}</td>
@@ -572,10 +573,10 @@ function costruisci(d) {
   ${notaProvv}
   <div class="tabellone"><table>
     <thead><tr><th>Data</th><th>Lega</th><th>Partita</th><th>Giocata</th>
-      <th class="n">Presa</th><th class="n">Chiusura</th><th class="n">CLV</th><th class="n">Finita</th>
+      <th class="n">Punta €</th><th class="n">Presa</th><th class="n">Chiusura</th><th class="n">CLV</th><th class="n">Finita</th>
       <th>Esito</th><th class="n">P&amp;L €</th></tr></thead>
-    <tbody>${chiuse || '<tr><td colspan="10" class="vuoto">nessuna giocata conclusa</td></tr>'}
-      <tr class="nessuna" hidden><td colspan="10" class="vuoto">nessuna giocata conclusa con questi filtri</td></tr></tbody>
+    <tbody>${chiuse || '<tr><td colspan="11" class="vuoto">nessuna giocata conclusa</td></tr>'}
+      <tr class="nessuna" hidden><td colspan="11" class="vuoto">nessuna giocata conclusa con questi filtri</td></tr></tbody>
   </table></div>
 </section>
 
