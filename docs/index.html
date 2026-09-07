@@ -113,6 +113,8 @@ td.m{min-width:210px}
   padding:2px 8px;border-radius:2px;border:1px solid}
 .esito.v{color:var(--pos);border-color:var(--pos)}
 .esito.p{color:var(--neg);border-color:var(--neg)}
+.provv{font-size:10px;letter-spacing:.04em;color:var(--warn);border:1px solid var(--warn);
+  border-radius:2px;padding:1px 5px;margin-left:6px;text-transform:uppercase;white-space:nowrap}
 .stato{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:14px}
 .freschezza{background:var(--surface);border:1px solid var(--line);border-radius:2px;
   padding:13px 15px}
@@ -215,7 +217,8 @@ function pct(v, dec = 1, segno = true) {
 const tipoDi = x => SEL_IT[x.mercato + "|" + x.selezione] || x.selezione;
 function risultatoDi(x) {
   const n = (x.note || "").trim();
-  return n.toLowerCase().startsWith("risultato") ? n.slice(9).trim() : "";
+  // la nota può proseguire (" · Understat…", " [rettifica…]"): tieni solo il punteggio
+  return n.toLowerCase().startsWith("risultato") ? (n.slice(9).trim().split(/\s+/)[0] || "") : "";
 }
 const gg = (a, b) => Math.round((a - b) / 86400000);
 
@@ -378,6 +381,12 @@ function rigaChiusa(x) {
   const clv = x.clv;
   const cls = (clv === null || clv === undefined || Number(clv) === 0)
     ? "" : (Number(clv) > 0 ? "pos" : "neg");
+  // esito da Understat, CLV non ancora agganciabile a football-data
+  const provv = (clv === null || clv === undefined)
+    && /Understat/.test(x.note || "");
+  const tagProvv = provv
+    ? ` <span class="provv" title="Esito da Understat: football-data non ha ancora pubblicato la partita, il CLV verrà calcolato al prossimo aggiornamento">provv.</span>`
+    : "";
   return `<tr data-lega="${esc(x.lega)}" data-tipo="${esc(tipoDi(x))}">
  <td class="d">${esc(x.data_partita.slice(8, 10))}/${esc(x.data_partita.slice(5, 7))}</td>
  <td><span class="lega">${esc(x.lega)}</span></td>
@@ -387,7 +396,7 @@ function rigaChiusa(x) {
  <td class="n">${x.quota_chiusura ? num(x.quota_chiusura) : "—"}</td>
  <td class="n ${cls}">${clv !== null && clv !== undefined ? pct(clv) : "—"}</td>
  <td class="n ris">${esc(risultatoDi(x)) || "—"}</td>
- <td><span class="esito ${vinta ? "v" : "p"}">${vinta ? "vinta" : "persa"}</span></td>
+ <td><span class="esito ${vinta ? "v" : "p"}">${vinta ? "vinta" : "persa"}</span>${tagProvv}</td>
  <td class="n ${pnl > 0 ? "pos" : "neg"}">${num(pnl, 2, true)}</td></tr>`;
 }
 
@@ -459,6 +468,14 @@ function costruisci(d) {
                           .map(rigaAperta).join("");
   const chiuse = d.chiuse.slice().sort((a, b) => b.data_partita.localeCompare(a.data_partita))
                           .map(rigaChiusa).join("");
+  const nProvv = d.chiuse.filter(x =>
+    (x.clv === null || x.clv === undefined) && /Understat/.test(x.note || "")).length;
+  const notaProvv = nProvv
+    ? `<p class="nota">${nProvv === 1 ? "Una giocata è contrassegnata" : nProvv + " giocate sono contrassegnate"}
+       <span class="provv">provv.</span>: l'esito viene da Understat perché football-data non ha ancora
+       pubblicato quelle partite. Il P&amp;L è già contato; il CLV verrà calcolato appena football-data
+       le pubblica.</p>`
+    : "";
   const bank = Number(d.meta.bankroll0 || 1000);
 
   return `
@@ -552,6 +569,7 @@ function costruisci(d) {
 
 <section id="sez-chiuse">
   <div class="shead"><h2>Giocate concluse</h2><span class="stamp conta">${d.chiuse.length} concluse</span></div>
+  ${notaProvv}
   <div class="tabellone"><table>
     <thead><tr><th>Data</th><th>Lega</th><th>Partita</th><th>Giocata</th>
       <th class="n">Presa</th><th class="n">Chiusura</th><th class="n">CLV</th><th class="n">Finita</th>
@@ -577,8 +595,9 @@ function costruisci(d) {
   <p>Esperimento a bankroll simulato: nessuna somma reale è impegnata. Le regole (banda di edge
   2–10%, Kelly 1/4, cap 1% per giocata, massimo 25 giocate a turno) sono fissate nel runbook e non
   vengono modificate a esperimento in corso.</p>
-  <p>Dati: football-data.co.uk per risultati e quote, Understat per gli xG. Il benchmark è la quota
-  massima di chiusura; Pinnacle non è più pubblicato dal 2026/27.</p>
+  <p>Dati: football-data.co.uk per risultati e quote, Understat per gli xG e come fonte-ponte dei
+  risultati finché football-data non pubblica (giocate <span class="provv">provv.</span>). Il benchmark
+  è la quota massima di chiusura; Pinnacle non è più pubblicato dal 2026/27.</p>
   <p>Questa pagina legge Supabase in sola lettura a ogni apertura: non c'è una copia da rigenerare,
   e quindi non c'è una copia che possa restare indietro.</p>
 </footer>`;

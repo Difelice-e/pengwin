@@ -196,10 +196,28 @@ python -m src.report.dashboard out.html     # rigenera la pagina
 L'ordine conta: prima l'ingest, poi la contabilizzazione (che ha bisogno dei
 risultati appena scaricati), poi le previsioni.
 
-`settle.py` non tocca mai una giocata gia' contabilizzata, quindi si puo'
-rilanciare liberamente. Calcola anche il **CLV** — quota presa diviso quota di
-chiusura, meno uno — che il par.6 della specifica indica come il segnale
-affidabile, molto prima del ROI.
+`settle.py` non tocca mai una giocata gia' contabilizzata *con CLV calcolato*,
+quindi si puo' rilanciare liberamente. Calcola anche il **CLV** — quota presa
+diviso quota di chiusura, meno uno — che il par.6 della specifica indica come il
+segnale affidabile, molto prima del ROI.
+
+**Contabilizzazione a due fasi.** football-data pubblica i CSV stagionali con
+ore o giorni di ritardo rispetto alla fine delle partite. Per non lasciare il
+ledger fermo:
+
+- se il risultato e' in `partite` (football-data) → contabilizzazione completa,
+  con `quota_chiusura` e CLV: giocata definitiva;
+- se invece e' solo in `xg_partite` (Understat) → contabilizzazione
+  **provvisoria**: esito e P&L subito, `clv`/`quota_chiusura` restano NULL e la
+  nota porta il marcatore `· Understat`. Sulla pagina live queste giocate hanno
+  il tag `provv.`;
+- ogni rilancio successivo, la **fase 2** riprende le giocate chiuse senza CLV e,
+  appena football-data pubblica, riempie `quota_chiusura` e CLV. Se il risultato
+  di football-data contraddice quello provvisorio di Understat, football-data
+  prevale e la rettifica finisce in `note` e nel log.
+
+Il segnale "provvisoria" e' `esito != aperta AND clv IS NULL AND note ~ 'Understat'`:
+nessuna colonna nuova, nessuna migrazione dello schema.
 
 Senza `--registra` `predict.py` non scrive nulla: e' la modalita' giusta per controllare prima
 di impegnare il turno. **Non lanciare `--registra` due volte sullo stesso turno**:

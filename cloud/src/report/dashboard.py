@@ -161,9 +161,18 @@ def tipo(x) -> str:
 
 
 def risultato(x) -> str:
-    """Il punteggio finale e' annotato in `note` nella forma 'risultato 1-3'."""
+    """Il punteggio finale e' annotato in `note` come 'risultato 1-3', a volte
+    seguito da altro (' · Understat…', ' [rettifica…]'): si tiene solo il punteggio."""
     n = (x.get("note") or "").strip()
-    return n[len("risultato"):].strip() if n.lower().startswith("risultato") else ""
+    if not n.lower().startswith("risultato"):
+        return ""
+    resto = n[len("risultato"):].strip().split()
+    return resto[0] if resto else ""
+
+
+def provvisoria(x) -> bool:
+    """Esito da Understat, CLV non ancora agganciato a football-data."""
+    return x.get("clv") is None and "Understat" in (x.get("note") or "")
 
 
 def riga_aperta(x) -> str:
@@ -193,7 +202,9 @@ def riga_chiusa(x) -> str:
  <td class="n">{num(x["quota_chiusura"]) if x["quota_chiusura"] else "—"}</td>
  <td class="n {cls}">{pct(clv) if clv is not None else "—"}</td>
  <td class="n ris">{e(risultato(x)) or "—"}</td>
- <td><span class="esito {'v' if vinta else 'p'}">{'vinta' if vinta else 'persa'}</span></td>
+ <td><span class="esito {'v' if vinta else 'p'}">{'vinta' if vinta else 'persa'}</span>{
+     ' <span class="provv" title="Esito da Understat, CLV in attesa di football-data">provv.</span>'
+     if provvisoria(x) else ''}</td>
  <td class="n {'pos' if pnl > 0 else 'neg'}">{num(pnl, 2, True)}</td></tr>'''
 
 
@@ -405,6 +416,8 @@ td.m{min-width:210px}
   padding:2px 8px;border-radius:2px;border:1px solid}
 .esito.v{color:var(--pos);border-color:var(--pos)}
 .esito.p{color:var(--neg);border-color:var(--neg)}
+.provv{font-size:10px;letter-spacing:.04em;color:var(--warn);border:1px solid var(--warn);
+  border-radius:2px;padding:1px 5px;margin-left:6px;text-transform:uppercase;white-space:nowrap}
 .stato{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:14px}
 .freschezza{background:var(--surface);border:1px solid var(--line);border-radius:2px;
   padding:13px 15px}

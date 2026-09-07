@@ -221,3 +221,4 @@ corrispondente in `dashboard_data.json → band` (`p2_5`, `p25`, `p50`, `p75`, `
 | 30/08 | fonte ferma, nessuna operazione |
 | 01/09 | contabilizzate 7 giocate del 31/08 — tutte e 24 chiuse, P&L +32,50 € |
 | 03/09 | 2 giocate nuove (Toulouse–Lille U2.5, Sociedad–Celta O2.5); dashboard pubblicata come artifact `pengwin-banco-di-prova` |
+| 07/09 | cloud: ingest football-data prova l'apex e ripiega su `www` (vhost `www` in 503). `cloud/src/report/settle.py` contabilizza a due fasi — esito+P&L da Understat subito quando football-data è indietro (tag `provv.`), CLV riempito da football-data al rilancio successivo. Nessuna costante di selezione toccata. La versione PC di `settle.py` resta invariata. |
