@@ -249,15 +249,26 @@ Atteso: 7 tabelle, `rowsecurity = true`, 1 policy ciascuna.
 
 ## Dashboard
 
-`src/report/dashboard.py` genera una pagina HTML autonoma leggendo tutto da
-Supabase: nessuna dipendenza da file locali, nessuna chiamata di rete dalla
-pagina. Viene pubblicata come artifact ed e' raggiungibile da qualunque
-dispositivo.
+La pagina live e' `docs/index.html`, pubblicata via GitHub Pages. Non e' generata:
+legge Supabase **dal browser** a ogni apertura (publishable key incorporata nella
+pagina, RLS in sola lettura la rende sicura da esporre) e ricostruisce tutto —
+metriche, grafici, tabelle — con JavaScript lato client. Non c'e' una copia
+statica da rigenerare, quindi non c'e' una copia che possa restare indietro: se
+la lettura fallisce, la pagina lo dice invece di mostrare numeri vecchi.
+
+`src/report/dashboard.py` genera l'equivalente come HTML statico (dati incorporati
+al momento dell'esecuzione anziche' letti dal browser) e viene tenuto sincronizzato
+con `docs/index.html` a ogni modifica, ma non alimenta piu' nulla in produzione:
+serve solo come riferimento offline o per un eventuale ritorno al modello statico.
 
 La pagina e' ordinata per **peso probatorio**, non per estetica: il CLV viene
 prima del ROI, perche' e' il criterio dichiarato nella specifica e il ROI su
 poche decine di giocate e' rumore. Una dashboard che apre con il ROI positivo
-racconterebbe una storia che i dati non sostengono.
+racconterebbe una storia che i dati non sostengono. I filtri (campionato, tipo
+di giocata, stato) ricalcolano anche questi riquadri, non solo la tabella, e un
+pannello dedicato mostra l'intervallo di confidenza sul ROI della selezione
+corrente insieme a quante giocate servirebbero per distinguere un vantaggio
+reale dal rumore.
 
 Mostra anche lo **stato di freschezza dei dati** per campionato, con
 evidenziazione oltre i dieci giorni: e' la protezione contro il problema che ha
@@ -266,11 +277,14 @@ partita della stagione.
 
 ## Esecuzione automatica
 
-Il ciclo gira come attivita' pianificata in una sessione nuova, che:
+Il ciclo gira come workflow GitHub Actions (`.github/workflows/pengwin.yml`,
+`pengwin-turno.yml`), non come attivita' pianificata di una sessione Claude:
 
-1. clona questo repository (`git clone` funziona dal container; le API di GitHub no);
-2. installa le dipendenze;
-3. esegue ingest, contabilizzazione e previsioni;
-4. rigenera la dashboard e la ripubblica **sullo stesso indirizzo**.
+1. `pengwin.yml` (ogni giorno, anche a mano da Actions): ingest risultati e xG,
+   carica su Supabase, contabilizza le giocate concluse;
+2. `pengwin-turno.yml` (il venerdi'): in piu' registra il turno successivo.
 
-Le chiavi Supabase stanno nel prompt dell'attivita' pianificata, non nel codice.
+Non c'e' un passo di "rigenera e ripubblica la dashboard": `docs/index.html` legge
+Supabase da sola a ogni apertura, quindi aggiornare il database e' sufficiente.
+Le chiavi Supabase stanno nei secret del repository (`Settings -> Secrets and
+variables -> Actions`), non nel codice.

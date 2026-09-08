@@ -1,9 +1,0 @@
-{
-  "id": "pengwin-banco-di-prova",
-  "titolo": "Banco di prova Pengwin",
-  "pubblicato_il": "2026-09-03",
-  "nota": "Id dell'artifact della dashboard. Le esecuzioni successive devono rigenerare dash/dashboard.html da dash/tpl.html + outputs/dashboard_data.json e poi aggiornare QUESTO id, cosi' l'indirizzo resta lo stesso. Non creare un artifact nuovo: cambierebbe l'indirizzo.",
-  "preparazione_html": "Prima di pubblicare: togliere il <link> ai font di Google (bloccato nella vista sandboxed) e avvolgere il frammento in <!DOCTYPE html><html lang=\"it\" data-theme=\"light\">...</html>.",
-  "regola_codifica": "tpl.html e dashboard.html devono restare ASCII PURI. Gli accenti e i simboli stanno come entita' (&#232;) nell'HTML e come escape \\uXXXX dentro <script>; il JSON va serializzato con ensure_ascii=True. Motivo: se la pagina viene servita con un charset diverso da UTF-8, l'header HTTP vince sul <meta> e ogni carattere accentato si spezza a video in due caratteri illeggibili. Controllo prima di pubblicare: grep -nP '[^\\x00-\\x7F]' dash/dashboard.html  deve non restituire nulla. Backup della versione UTF-8 originale del template: dash/tpl_utf8_backup.html",
-  "ultimo_aggiornamento": "2026-09-04"
-}
