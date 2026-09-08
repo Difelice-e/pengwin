@@ -73,6 +73,23 @@ section{display:flex;flex-direction:column;gap:14px}
 .met.primaria{background:var(--raise)}
 .pos{color:var(--pos)} .neg{color:var(--neg)}
 
+/* affidabilita': intervallo di confidenza sul ROI della selezione */
+.affid{background:var(--surface);border:1px solid var(--line);border-radius:2px;
+  padding:20px 22px;display:flex;flex-direction:column;gap:12px}
+.affid-riga{display:flex;flex-wrap:wrap;align-items:baseline;gap:12px}
+.affid-riga .k{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);
+  font-weight:600;min-width:190px}
+.affid-riga .v{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:19px;
+  font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.vchip{display:inline-flex;align-items:center;font-size:11px;font-weight:600;
+  padding:2px 10px;border-radius:999px;letter-spacing:.02em}
+.vchip.no{color:var(--neg);background:color-mix(in srgb,var(--neg) 14%,transparent)}
+.vchip.forse{color:var(--warn);background:color-mix(in srgb,var(--warn) 16%,transparent)}
+.vchip.si{color:var(--pos);background:color-mix(in srgb,var(--pos) 14%,transparent)}
+.barra-prog{height:7px;border-radius:4px;background:var(--raise);overflow:hidden}
+.barra-prog i{display:block;height:100%;background:var(--accent);border-radius:4px;
+  transition:width .15s}
+
 .pannello{background:var(--surface);border:1px solid var(--line);border-radius:2px;
   padding:20px 22px}
 .chart{width:100%;height:auto;display:block}
@@ -302,23 +319,28 @@ async function raccogli() {
 
 /* ------------------------------------------------------------ grafici */
 function graficoClv(d) {
-  const c = d.clvs;
-  if (!c.length) return "<p class='vuoto'>nessuna giocata conclusa con quota di chiusura</p>";
+  // ogni tratto porta data-lega/data-tipo come le righe della tabella: attivaFiltri()
+  // mostra/nasconde e ricalcola la mediana visibile. La scala resta fissa sul dataset intero.
+  const filtrabili = d.chiuse.filter(x => x.clv !== null && x.clv !== undefined);
+  if (!filtrabili.length) return "<p class='vuoto'>nessuna giocata conclusa con quota di chiusura</p>";
+  const c = filtrabili.map(x => Number(x.clv));
   const W = 720, H = 92, L = 18, R = 18;
   const lo = Math.min(...c, -0.06), hi = Math.max(...c, 0.06);
   const X = v => L + (W - L - R) * ((v - lo) / (hi - lo));
-  const marks = c.map(v =>
-    `<line x1="${X(v).toFixed(1)}" y1="24" x2="${X(v).toFixed(1)}" y2="56" class="${v > 0 ? "clvpos" : "clvneg"}" />`
+  const marks = filtrabili.map((x, i) =>
+    `<line data-lega="${esc(x.lega)}" data-tipo="${esc(tipoDi(x))}" data-clv="${c[i]}" ` +
+    `x1="${X(c[i]).toFixed(1)}" y1="24" x2="${X(c[i]).toFixed(1)}" y2="56" class="${c[i] > 0 ? "clvpos" : "clvneg"}" />`
   ).join("");
   const med = c.reduce((a, b) => a + b, 0) / c.length;
-  return `<svg viewBox="0 0 ${W} ${H}" class="chart" role="img"
+  return `<svg viewBox="0 0 ${W} ${H}" class="chart" role="img" id="clv-chart"
+    data-l="${L}" data-r="${R}" data-w="${W}" data-lo="${lo}" data-hi="${hi}"
     aria-label="Distribuzione del CLV per giocata conclusa">
   <line x1="${L}" y1="40" x2="${W - R}" y2="40" class="grid" />
   ${marks}
   <line x1="${X(0).toFixed(1)}" y1="16" x2="${X(0).toFixed(1)}" y2="64" class="zero" />
   <text x="${X(0).toFixed(1)}" y="80" class="tick" text-anchor="middle">0</text>
-  <line x1="${X(med).toFixed(1)}" y1="20" x2="${X(med).toFixed(1)}" y2="60" class="mediaclv" />
-  <text x="${W - R}" y="14" class="tick" text-anchor="end">media ${pct(med)}</text>
+  <line id="clv-med-line" x1="${X(med).toFixed(1)}" y1="20" x2="${X(med).toFixed(1)}" y2="60" class="mediaclv" />
+  <text id="clv-med-label" x="${W - R}" y="14" class="tick" text-anchor="end">media ${pct(med)} (n=${c.length})</text>
   <text x="${L}" y="14" class="tick" text-anchor="start">quota peggiore della chiusura</text>
   <text x="${W - R}" y="80" class="tick" text-anchor="end">quota migliore</text>
 </svg>`;
@@ -364,7 +386,7 @@ function graficoBanda(d) {
 
 /* ------------------------------------------------------------ tabelle */
 function rigaAperta(x) {
-  return `<tr data-lega="${esc(x.lega)}" data-tipo="${esc(tipoDi(x))}">
+  return `<tr data-lega="${esc(x.lega)}" data-tipo="${esc(tipoDi(x))}" data-stake="${Number(x.stake)}">
  <td class="d">${esc(x.data_partita.slice(8, 10))}/${esc(x.data_partita.slice(5, 7))}</td>
  <td><span class="lega">${esc(x.lega)}</span></td>
  <td class="m">${esc(x.casa)} <span class="v">–</span> ${esc(x.trasferta)}</td>
@@ -387,7 +409,8 @@ function rigaChiusa(x) {
   const tagProvv = provv
     ? ` <span class="provv" title="Esito da Understat: football-data non ha ancora pubblicato la partita, il CLV verrà calcolato al prossimo aggiornamento">provv.</span>`
     : "";
-  return `<tr data-lega="${esc(x.lega)}" data-tipo="${esc(tipoDi(x))}">
+  const clvAttr = (clv === null || clv === undefined) ? "" : ` data-clv="${Number(clv)}"`;
+  return `<tr data-lega="${esc(x.lega)}" data-tipo="${esc(tipoDi(x))}" data-stake="${Number(x.stake)}" data-pnl="${pnl}"${clvAttr}>
  <td class="d">${esc(x.data_partita.slice(8, 10))}/${esc(x.data_partita.slice(5, 7))}</td>
  <td><span class="lega">${esc(x.lega)}</span></td>
  <td class="m">${esc(x.casa)} <span class="v">–</span> ${esc(x.trasferta)}</td>
@@ -503,24 +526,50 @@ function costruisci(d) {
   <div class="metriche">
     <div class="met primaria">
       <div class="k">CLV medio</div>
-      <div class="val ${clvNeg ? "neg" : "pos"}">${pct(d.clv_medio)}</div>
-      <div class="note">positivo su ${d.clv_pos}/${d.clvs.length} giocate · criterio primario</div>
+      <div class="val ${clvNeg ? "neg" : "pos"}" id="m-clv">${pct(d.clv_medio)}</div>
+      <div class="note" id="m-clv-note">positivo su ${d.clv_pos}/${d.clvs.length} giocate · criterio primario</div>
     </div>
     <div class="met">
       <div class="k">ROI</div>
-      <div class="val ${(d.roi || 0) > 0 ? "pos" : "neg"}">${pct(d.roi)}</div>
-      <div class="note">su ${d.chiuse.length} concluse · campione troppo piccolo</div>
+      <div class="val ${(d.roi || 0) > 0 ? "pos" : "neg"}" id="m-roi">${pct(d.roi)}</div>
+      <div class="note" id="m-roi-note">su ${d.chiuse.length} concluse · campione troppo piccolo</div>
+    </div>
+    <div class="met">
+      <div class="k">Volume puntato</div>
+      <div class="val" id="m-vol">${num(d.stake)} €</div>
+      <div class="note" id="m-vol-note">${d.chiuse.length} giocate concluse</div>
     </div>
     <div class="met">
       <div class="k">P&amp;L</div>
-      <div class="val ${d.pnl > 0 ? "pos" : "neg"}">${num(d.pnl, 2, true)} €</div>
-      <div class="note">volume ${num(d.stake)} € su bankroll ${num(bank, 0)} €</div>
+      <div class="val ${d.pnl > 0 ? "pos" : "neg"}" id="m-pnl">${num(d.pnl, 2, true)} €</div>
+      <div class="note">su bankroll ${num(bank, 0)} €</div>
     </div>
     <div class="met">
       <div class="k">In corso</div>
-      <div class="val">${d.aperte.length}</div>
-      <div class="note">${num(d.esposto)} € esposti</div>
+      <div class="val" id="m-open">${d.aperte.length}</div>
+      <div class="note" id="m-open-note">${num(d.esposto)} € esposti</div>
     </div>
+  </div>
+</section>
+
+<section>
+  <div class="shead"><h2>Quanto puoi fidarti di questo ROI</h2></div>
+  <p class="nota">Il ROI da solo non dice quanto è preciso. Qui l'intervallo entro cui cade
+  probabilmente il valore vero, e quante giocate servirebbero per distinguere un vantaggio del
+  5% dal rumore puro. Si aggiorna con i filtri: su una selezione piccola resta largo, ed è giusto
+  che sia così — non è un difetto della pagina, è quanto puoi davvero sapere da pochi dati.</p>
+  <div class="affid" id="affid-pannello">
+    <div class="affid-riga">
+      <span class="k">Il ROI vero sta fra</span>
+      <span class="v" id="affid-range">—</span>
+      <span class="vchip" id="affid-chip"></span>
+    </div>
+    <div class="affid-riga">
+      <span class="k">Progresso verso una risposta</span>
+      <span class="v" id="affid-prog">—</span>
+    </div>
+    <div class="barra-prog"><i id="affid-bar" style="width:0%"></i></div>
+    <p class="nota" id="affid-testo" style="margin:0"></p>
   </div>
 </section>
 
@@ -552,9 +601,8 @@ function costruisci(d) {
 
 <section>
   <div class="shead"><h2>Le giocate</h2></div>
-  <p class="nota">I filtri cambiano solo che cosa è in tabella. CLV e ROI qui sopra restano quelli
-  dell'esperimento intero: su ${d.chiuse.length} giocate concluse, un CLV per singolo campionato
-  poggerebbe su una manciata di righe e non direbbe nulla.</p>
+  <p class="nota">I filtri cambiano anche i riquadri qui sopra, non solo la tabella: su una
+  selezione piccola CLV e ROI oscillano molto e vanno letti con cautela, non come una scoperta.</p>
   ${barraFiltri(d)}
 </section>
 
@@ -605,6 +653,11 @@ function costruisci(d) {
 }
 
 /* -------------------------------------------------------------- filtri */
+function fmtPts(v) {
+  if (v === null || v === undefined || !isFinite(v)) return "—";
+  return (v >= 0 ? "+" : "") + v.toFixed(1).replace(".", ",") + "%";
+}
+
 function attivaFiltri() {
   const barra = document.getElementById("filtri");
   if (!barra) return;
@@ -612,19 +665,44 @@ function attivaFiltri() {
   const sezioni = { aperte: document.getElementById("sez-aperte"),
                     chiuse: document.getElementById("sez-chiuse") };
 
+  function setTxt(id, txt) { const el = document.getElementById(id); if (el) el.textContent = txt; }
+  function setCls(id, cls) { const el = document.getElementById(id); if (el) el.className = "val " + cls; }
+
   function applica() {
     let visti = 0;
+    let stakeChiuse = 0, pnl = 0, clvSum = 0, clvN = 0, clvPos = 0, nChiuse = 0;
+    let esposto = 0, nAperte = 0, mostraChiuse = false, rets = [];
+
     ["aperte", "chiuse"].forEach(k => {
       const sez = sezioni[k];
       if (!sez) return;
       const mostraSez = (sel.stato === "tutte" || sel.stato === k);
+      if (k === "chiuse") mostraChiuse = mostraSez;
       sez.hidden = !mostraSez;
       let n = 0;
       sez.querySelectorAll("tbody tr[data-lega]").forEach(tr => {
         const ok = (!sel.lega || tr.dataset.lega === sel.lega) &&
                    (!sel.tipo || tr.dataset.tipo === sel.tipo);
         tr.hidden = !ok;
-        if (ok) n++;
+        if (ok) {
+          n++;
+          if (mostraSez) {
+            const stake = parseFloat(tr.dataset.stake);
+            if (k === "aperte") {
+              esposto += stake; nAperte++;
+            } else {
+              const rigaPnl = parseFloat(tr.dataset.pnl);
+              stakeChiuse += stake; nChiuse++;
+              pnl += rigaPnl;
+              rets.push(rigaPnl / stake);
+              if (tr.dataset.clv !== undefined) {
+                const clv = parseFloat(tr.dataset.clv);
+                clvSum += clv; clvN++;
+                if (clv > 0) clvPos++;
+              }
+            }
+          }
+        }
       });
       const vuoto = sez.querySelector(".nessuna");
       if (vuoto) vuoto.hidden = (n > 0);
@@ -646,6 +724,98 @@ function attivaFiltri() {
       b.classList.toggle("attivo", attivo);
       b.setAttribute("aria-pressed", attivo ? "true" : "false");
     });
+
+    // riquadri in alto: ricalcolati sulla selezione corrente
+    const clvMedio = clvN ? clvSum / clvN : null;
+    const roi = stakeChiuse ? pnl / stakeChiuse : null;
+    const nessuna = filtra ? "nessuna nella selezione" : "nessuna giocata conclusa";
+    setTxt("m-clv", pct(clvMedio));
+    setCls("m-clv", clvMedio !== null && clvMedio < 0 ? "neg" : "pos");
+    setTxt("m-clv-note", clvN ? ("positivo su " + clvPos + "/" + clvN + " giocate" +
+      (filtra ? " nella selezione" : " · criterio primario")) : nessuna);
+    setTxt("m-roi", pct(roi));
+    setCls("m-roi", (roi || 0) > 0 ? "pos" : "neg");
+    setTxt("m-roi-note", nChiuse ? ("su " + nChiuse + " concluse" +
+      (filtra ? " nella selezione" : " · campione troppo piccolo")) : nessuna);
+    setTxt("m-vol", num(stakeChiuse, 2, false) + " €");
+    setTxt("m-vol-note", nChiuse ? (nChiuse + " giocate concluse" +
+      (esposto ? " · " + num(esposto, 2, false) + " € ancora aperti" : "")) : nessuna);
+    setTxt("m-pnl", num(pnl, 2, true) + " €");
+    setCls("m-pnl", pnl > 0 ? "pos" : "neg");
+    setTxt("m-open", String(nAperte));
+    setTxt("m-open-note", num(esposto, 2, false) + " € esposti");
+
+    // grafico CLV: stessi filtri delle righe, scala fissa, mediana ricalcolata
+    const svg = document.getElementById("clv-chart");
+    if (svg) {
+      svg.querySelectorAll(".clvpos, .clvneg").forEach(m => {
+        const ok = mostraChiuse && (!sel.lega || m.dataset.lega === sel.lega) &&
+                   (!sel.tipo || m.dataset.tipo === sel.tipo);
+        m.style.display = ok ? "" : "none";
+      });
+      const medLine = document.getElementById("clv-med-line"), medLabel = document.getElementById("clv-med-label");
+      if (clvN) {
+        const L = parseFloat(svg.dataset.l), R = parseFloat(svg.dataset.r), W = parseFloat(svg.dataset.w),
+              lo = parseFloat(svg.dataset.lo), hi = parseFloat(svg.dataset.hi);
+        const x = (L + (W - L - R) * ((clvMedio - lo) / (hi - lo))).toFixed(1);
+        if (medLine) { medLine.setAttribute("x1", x); medLine.setAttribute("x2", x); medLine.style.display = ""; }
+        if (medLabel) { medLabel.textContent = "media " + pct(clvMedio) + " (n=" + clvN + ")"; medLabel.style.display = ""; }
+      } else {
+        if (medLine) medLine.style.display = "none";
+        if (medLabel) medLabel.textContent = "nessuna giocata nella selezione";
+      }
+    }
+
+    // affidabilita' del ROI: intervallo di confidenza e giocate necessarie per un edge del 5%.
+    // Sotto 8 giocate la deviazione campionaria non e' affidabile (puo' uscire vicina a zero
+    // per puro caso, es. tutte perse allo stesso modo): si usa un prior fisso finche' il
+    // campione non e' abbastanza grande da fidarsi della varianza osservata.
+    const nR = rets.length;
+    const meanR = nR ? rets.reduce((a, c) => a + c, 0) / nR : 0;
+    const sd = nR > 7
+      ? Math.sqrt(rets.reduce((a, c) => a + Math.pow(c - meanR, 2), 0) / (nR - 1))
+      : 1.5;
+    const se = nR ? sd / Math.sqrt(nR) : null;
+    const ciHalf = se !== null ? 1.96 * se * 100 : null;
+    const nNeeded = Math.ceil(Math.pow(1.96 * sd / 0.05, 2));
+    const range = document.getElementById("affid-range"), chip = document.getElementById("affid-chip"),
+          prog = document.getElementById("affid-prog"), bar = document.getElementById("affid-bar"),
+          testo = document.getElementById("affid-testo");
+    if (!nR) {
+      if (range) range.textContent = "—";
+      if (chip) chip.textContent = "";
+      if (prog) prog.textContent = "—";
+      if (bar) bar.style.width = "0%";
+      if (testo) testo.textContent = filtra
+        ? "Nessuna giocata conclusa in questa selezione: non c’è ancora niente da misurare."
+        : "Nessuna giocata conclusa: non c’è ancora niente da misurare.";
+    } else {
+      const roiPts = roi * 100, loPts = roiPts - ciHalf, hiPts = roiPts + ciHalf;
+      if (range) range.textContent = fmtPts(loPts) + " e " + fmtPts(hiPts);
+      let cls, lab, txt;
+      // sotto una manciata di giocate la deviazione campionaria puo' uscire vicina a
+      // zero per puro caso (es. tutte perse allo stesso modo): un intervallo stretto
+      // costruito su troppo pochi punti non e' affidabile, quindi non conta come misurabile.
+      if (nR < 8) {
+        cls = "no"; lab = "non conclusivo";
+        txt = "Con solo " + nR + " giocate concluse l’intervallo non è affidabile, per quanto possa " +
+          "sembrare stretto: la variabilità stimata su così pochi punti non si può ancora prendere sul serio.";
+      } else if (ciHalf > 15) {
+        cls = "no"; lab = "non conclusivo";
+        txt = "Con " + nR + " giocate concluse l’intervallo è largo " + (2 * ciHalf).toFixed(0) +
+          " punti percentuali. Qualunque valore qui dentro è compatibile coi dati: da questa selezione non si può concludere nulla.";
+      } else if (ciHalf > 7) {
+        cls = "forse"; lab = "indicativo";
+        txt = "Con " + nR + " giocate l’intervallo resta ampio. Serve per orientarsi, non per decidere.";
+      } else {
+        cls = "si"; lab = "misurabile";
+        txt = "Con " + nR + " giocate l’intervallo è abbastanza stretto da distinguere un vantaggio reale da uno apparente.";
+      }
+      if (chip) { chip.className = "vchip " + cls; chip.textContent = lab; }
+      if (prog) prog.textContent = nR + " di ~" + nNeeded.toLocaleString("it-IT") + " giocate";
+      if (bar) bar.style.width = Math.min(100, 100 * nR / nNeeded) + "%";
+      if (testo) testo.textContent = txt;
+    }
   }
 
   barra.addEventListener("click", ev => {
