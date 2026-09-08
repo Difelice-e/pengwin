@@ -424,6 +424,54 @@ function rigaChiusa(x) {
  <td class="n ${pnl > 0 ? "pos" : "neg"}">${num(pnl, 2, true)}</td></tr>`;
 }
 
+/* ------------------------------------------------------- scomposizione */
+// Per campionato/mercato, ordinata per numero di giocate (non per ROI): la
+// fetta con piu' dati dietro viene prima, non quella che rende meglio.
+// Ordinare per ritorno premierebbe il rumore su celle da 1-3 giocate.
+function scomponiChiuse(chiuse, keyFn) {
+  const gruppi = new Map();
+  chiuse.forEach(x => {
+    const k = keyFn(x);
+    if (!gruppi.has(k)) gruppi.set(k, []);
+    gruppi.get(k).push(x);
+  });
+  const righe = [];
+  gruppi.forEach((list, chiave) => {
+    const n = list.length;
+    const stake = list.reduce((s, x) => s + Number(x.stake), 0);
+    const pnl = list.reduce((s, x) => s + (Number(x.ritorno || 0) - Number(x.stake)), 0);
+    const rets = list.map(x => (Number(x.ritorno || 0) - Number(x.stake)) / Number(x.stake));
+    const mean = rets.reduce((a, c) => a + c, 0) / n;
+    // sotto le 8 giocate la deviazione campionaria non e' affidabile: prior fisso,
+    // stessa soglia e stessa logica del pannello di affidabilita' sul ROI generale.
+    const sd = n > 7
+      ? Math.sqrt(rets.reduce((a, c) => a + Math.pow(c - mean, 2), 0) / (n - 1))
+      : 1.5;
+    const ciHalf = 1.96 * (sd / Math.sqrt(n)) * 100;
+    righe.push({ chiave, n, stake, pnl, roi: stake ? pnl / stake : null, ciHalf });
+  });
+  righe.sort((a, b) => b.n - a.n);
+  return righe;
+}
+
+function rigaScomposizione(r) {
+  const pochi = r.n < 8;
+  return `<tr>
+ <td>${esc(r.chiave)}</td>
+ <td class="n">${r.n}</td>
+ <td class="n ${(r.roi || 0) > 0 ? "pos" : "neg"}">${pct(r.roi)} <span style="color:var(--faint)">± ${r.ciHalf.toFixed(1).replace(".", ",")}</span></td>
+ <td class="n ${r.pnl > 0 ? "pos" : "neg"}">${num(r.pnl, 2, true)} €</td>
+ <td>${pochi ? '<span class="vchip no">poco dati</span>' : ""}</td></tr>`;
+}
+
+function tabellaScomposizione(righe, intestazione) {
+  const corpo = righe.map(rigaScomposizione).join("");
+  return `<div class="tabellone"><table>
+    <thead><tr><th>${intestazione}</th><th class="n">N</th><th class="n">ROI</th><th class="n">P&amp;L €</th><th></th></tr></thead>
+    <tbody>${corpo || '<tr><td colspan="5" class="vuoto">nessuna giocata conclusa</td></tr>'}</tbody>
+  </table></div>`;
+}
+
 function barraFiltri(d) {
   const tutte = d.aperte.concat(d.chiuse);
   const nLega = {}, nTipo = {};
@@ -460,6 +508,8 @@ function barraFiltri(d) {
 /* -------------------------------------------------------------- pagina */
 function costruisci(d) {
   const clvNeg = d.clv_medio !== null && d.clv_medio < 0;
+  const perLega = scomponiChiuse(d.chiuse, x => LEGHE[x.lega] || x.lega);
+  const perTipo = scomponiChiuse(d.chiuse, x => tipoDi(x));
   const verdetto = clvNeg
     ? `Il CLV medio è negativo: sulle giocate concluse la quota ottenuta era in media
        <strong>peggiore</strong> di quella a cui il mercato ha chiuso. È il segnale che il par. 6
@@ -574,6 +624,21 @@ function costruisci(d) {
 </section>
 
 <section>
+  <div class="shead"><h2>Per campionato</h2></div>
+  <p class="nota">Ordinato per numero di giocate concluse, non per ROI: la fetta con più dati dietro
+  viene prima, non quella che ha reso meglio finora. Sotto le 8 giocate il ROI di quella riga può
+  ribaltarsi con la prossima — per questo è marcata "poco dati" invece che lasciata in cima solo
+  perché è nata bene. Non risente dei filtri qui sotto: è già la scomposizione completa.</p>
+  ${tabellaScomposizione(perLega, "Campionato")}
+</section>
+
+<section>
+  <div class="shead"><h2>Per mercato</h2></div>
+  <p class="nota">Stessa logica, per tipo di giocata invece che per campionato.</p>
+  ${tabellaScomposizione(perTipo, "Giocata")}
+</section>
+
+<section>
   <div class="shead"><h2>CLV, giocata per giocata</h2></div>
   <p class="nota">Ogni tratto è una giocata conclusa: quanto la quota presa era migliore (verde,
   a destra dello zero) o peggiore (rossa) della quota di chiusura sullo stesso esito. Non dipende
@@ -661,7 +726,7 @@ function fmtPts(v) {
 function attivaFiltri() {
   const barra = document.getElementById("filtri");
   if (!barra) return;
-  let sel = { stato: "tutte", lega: "", tipo: "" };
+  let sel = { stato: "tutte", lega: new Set(), tipo: new Set() };
   const sezioni = { aperte: document.getElementById("sez-aperte"),
                     chiuse: document.getElementById("sez-chiuse") };
 
@@ -681,8 +746,8 @@ function attivaFiltri() {
       sez.hidden = !mostraSez;
       let n = 0;
       sez.querySelectorAll("tbody tr[data-lega]").forEach(tr => {
-        const ok = (!sel.lega || tr.dataset.lega === sel.lega) &&
-                   (!sel.tipo || tr.dataset.tipo === sel.tipo);
+        const ok = (sel.lega.size === 0 || sel.lega.has(tr.dataset.lega)) &&
+                   (sel.tipo.size === 0 || sel.tipo.has(tr.dataset.tipo));
         tr.hidden = !ok;
         if (ok) {
           n++;
@@ -711,7 +776,7 @@ function attivaFiltri() {
       if (mostraSez) visti += n;
     });
 
-    const filtra = (sel.stato !== "tutte" || sel.lega || sel.tipo);
+    const filtra = (sel.stato !== "tutte" || sel.lega.size > 0 || sel.tipo.size > 0);
     const et = document.getElementById("conteggio");
     if (et) et.textContent = filtra
       ? (visti === 1 ? "1 giocata in vista" : visti + " giocate in vista")
@@ -720,7 +785,8 @@ function attivaFiltri() {
     if (az) az.hidden = !filtra;
 
     barra.querySelectorAll(".chip").forEach(b => {
-      const attivo = sel[b.dataset.gruppo] === b.dataset.val;
+      const g = b.dataset.gruppo, v = b.dataset.val;
+      const attivo = g === "stato" ? sel.stato === v : (v === "" ? sel[g].size === 0 : sel[g].has(v));
       b.classList.toggle("attivo", attivo);
       b.setAttribute("aria-pressed", attivo ? "true" : "false");
     });
@@ -749,8 +815,8 @@ function attivaFiltri() {
     const svg = document.getElementById("clv-chart");
     if (svg) {
       svg.querySelectorAll(".clvpos, .clvneg").forEach(m => {
-        const ok = mostraChiuse && (!sel.lega || m.dataset.lega === sel.lega) &&
-                   (!sel.tipo || m.dataset.tipo === sel.tipo);
+        const ok = mostraChiuse && (sel.lega.size === 0 || sel.lega.has(m.dataset.lega)) &&
+                   (sel.tipo.size === 0 || sel.tipo.has(m.dataset.tipo));
         m.style.display = ok ? "" : "none";
       });
       const medLine = document.getElementById("clv-med-line"), medLabel = document.getElementById("clv-med-label");
@@ -822,12 +888,18 @@ function attivaFiltri() {
     const b = ev.target.closest(".chip");
     if (b) {
       const g = b.dataset.gruppo, v = b.dataset.val;
-      sel[g] = (sel[g] === v && g !== "stato") ? "" : v;
+      if (g === "stato") {
+        sel.stato = v;
+      } else if (v === "") {
+        sel[g].clear();
+      } else {
+        sel[g].has(v) ? sel[g].delete(v) : sel[g].add(v);
+      }
       applica();
       return;
     }
     if (ev.target.id === "azzera") {
-      sel = { stato: "tutte", lega: "", tipo: "" };
+      sel = { stato: "tutte", lega: new Set(), tipo: new Set() };
       applica();
     }
   });

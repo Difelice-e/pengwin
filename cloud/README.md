@@ -264,11 +264,23 @@ serve solo come riferimento offline o per un eventuale ritorno al modello static
 La pagina e' ordinata per **peso probatorio**, non per estetica: il CLV viene
 prima del ROI, perche' e' il criterio dichiarato nella specifica e il ROI su
 poche decine di giocate e' rumore. Una dashboard che apre con il ROI positivo
-racconterebbe una storia che i dati non sostengono. I filtri (campionato, tipo
-di giocata, stato) ricalcolano anche questi riquadri, non solo la tabella, e un
-pannello dedicato mostra l'intervallo di confidenza sul ROI della selezione
-corrente insieme a quante giocate servirebbero per distinguere un vantaggio
-reale dal rumore.
+racconterebbe una storia che i dati non sostengono. I filtri campionato e tipo
+di giocata sono multiselect (si possono combinare piu' leghe o piu' mercati
+insieme, es. Premier + Serie A), lo stato resta a scelta singola perche'
+aperte/chiuse/tutte coprono gia' tutto lo spazio delle opzioni. I filtri
+ricalcolano anche i riquadri in alto, non solo la tabella, e un pannello
+dedicato mostra l'intervallo di confidenza sul ROI della selezione corrente
+insieme a quante giocate servirebbero per distinguere un vantaggio reale dal
+rumore.
+
+Due tabelle mostrano anche la scomposizione **per campionato** e **per
+mercato** su tutte le giocate concluse (non risentono dei filtri sopra, sono
+gia' la vista completa) — ordinate per numero di giocate, non per ROI: la
+fetta con piu' dati dietro viene prima, non quella che ha reso meglio finora.
+Sotto le 8 giocate la riga e' marcata "poco dati" invece che lasciata in cima
+solo perche' e' nata bene: e' la stessa logica che ha smascherato il falso
+allarme sulla Premier League nel backtest, applicata sistematicamente invece
+che raccontata una volta sola in un paragrafo.
 
 Mostra anche lo **stato di freschezza dei dati** per campionato, con
 evidenziazione oltre i dieci giorni: e' la protezione contro il problema che ha

@@ -218,6 +218,52 @@ data-stake="{float(x["stake"])}" data-pnl="{pnl}"{clv_attr}>
  <td class="n {'pos' if pnl > 0 else 'neg'}">{num(pnl, 2, True)}</td></tr>'''
 
 
+def scomponi_chiuse(chiuse: list, key_fn) -> list:
+    """Per campionato/mercato, ordinata per numero di giocate (non per ROI): la
+    fetta con piu' dati dietro viene prima, non quella che rende meglio. Ordinare
+    per ritorno premierebbe il rumore su celle da 1-3 giocate."""
+    gruppi: dict = {}
+    for x in chiuse:
+        gruppi.setdefault(key_fn(x), []).append(x)
+    righe = []
+    for chiave, lista in gruppi.items():
+        n = len(lista)
+        stake = sum(float(x["stake"]) for x in lista)
+        pnl = sum(float(x["ritorno"] or 0) - float(x["stake"]) for x in lista)
+        rets = [(float(x["ritorno"] or 0) - float(x["stake"])) / float(x["stake"]) for x in lista]
+        mean = sum(rets) / n
+        # sotto le 8 giocate la deviazione campionaria non e' affidabile: prior
+        # fisso, stessa soglia e logica del pannello di affidabilita' sul ROI.
+        sd = (sum((r - mean) ** 2 for r in rets) / (n - 1)) ** 0.5 if n > 7 else 1.5
+        ci_half = 1.96 * (sd / n ** 0.5) * 100
+        righe.append({"chiave": chiave, "n": n, "stake": stake, "pnl": pnl,
+                       "roi": (pnl / stake) if stake else None, "ci_half": ci_half})
+    righe.sort(key=lambda r: r["n"], reverse=True)
+    return righe
+
+
+def riga_scomposizione(r: dict) -> str:
+    pochi = r["n"] < 8
+    tag = '<span class="vchip no">poco dati</span>' if pochi else ""
+    cls_roi = "pos" if (r["roi"] or 0) > 0 else "neg"
+    cls_pnl = "pos" if r["pnl"] > 0 else "neg"
+    return f'''<tr>
+ <td>{e(r["chiave"])}</td>
+ <td class="n">{r["n"]}</td>
+ <td class="n {cls_roi}">{pct(r["roi"])} <span style="color:var(--faint)">± {num(r["ci_half"], 1)}</span></td>
+ <td class="n {cls_pnl}">{num(r["pnl"], 2, True)} €</td>
+ <td>{tag}</td></tr>'''
+
+
+def tabella_scomposizione(righe: list, intestazione: str) -> str:
+    corpo = "".join(riga_scomposizione(r) for r in righe)
+    vuoto = '<tr><td colspan="5" class="vuoto">nessuna giocata conclusa</td></tr>'
+    return f'''<div class="tabellone"><table>
+    <thead><tr><th>{intestazione}</th><th class="n">N</th><th class="n">ROI</th><th class="n">P&amp;L €</th><th></th></tr></thead>
+    <tbody>{corpo or vuoto}</tbody>
+  </table></div>'''
+
+
 def barra_filtri(d: dict) -> str:
     """Filtri per stato, campionato e tipo di giocata.
 
@@ -262,7 +308,7 @@ SCRIPT = """
 (function () {
   var barra = document.getElementById('filtri');
   if (!barra) return;
-  var sel = { stato: 'tutte', lega: '', tipo: '' };
+  var sel = { stato: 'tutte', lega: new Set(), tipo: new Set() };
   var sezioni = { aperte: document.getElementById('sez-aperte'),
                   chiuse: document.getElementById('sez-chiuse') };
 
@@ -291,8 +337,8 @@ SCRIPT = """
       var n = 0;
       var righe = sez.querySelectorAll('tbody tr[data-lega]');
       Array.prototype.forEach.call(righe, function (tr) {
-        var ok = (!sel.lega || tr.getAttribute('data-lega') === sel.lega) &&
-                 (!sel.tipo || tr.getAttribute('data-tipo') === sel.tipo);
+        var ok = (sel.lega.size === 0 || sel.lega.has(tr.getAttribute('data-lega'))) &&
+                 (sel.tipo.size === 0 || sel.tipo.has(tr.getAttribute('data-tipo')));
         tr.hidden = !ok;
         if (ok) {
           n++;
@@ -322,7 +368,7 @@ SCRIPT = """
       if (mostraSez) visti += n;
     });
 
-    var filtra = (sel.stato !== 'tutte' || sel.lega || sel.tipo);
+    var filtra = (sel.stato !== 'tutte' || sel.lega.size > 0 || sel.tipo.size > 0);
     var etichetta = document.getElementById('conteggio');
     if (etichetta) {
       etichetta.textContent = filtra
@@ -333,7 +379,8 @@ SCRIPT = """
     if (azzera) azzera.hidden = !filtra;
 
     Array.prototype.forEach.call(barra.querySelectorAll('.chip'), function (b) {
-      var attivo = sel[b.getAttribute('data-gruppo')] === b.getAttribute('data-val');
+      var g = b.getAttribute('data-gruppo'), v = b.getAttribute('data-val');
+      var attivo = g === 'stato' ? sel.stato === v : (v === '' ? sel[g].size === 0 : sel[g].has(v));
       b.classList.toggle('attivo', attivo);
       b.setAttribute('aria-pressed', attivo ? 'true' : 'false');
     });
@@ -362,8 +409,8 @@ SCRIPT = """
     var svg = document.getElementById('clv-chart');
     if (svg) {
       Array.prototype.forEach.call(svg.querySelectorAll('.clvpos, .clvneg'), function (m) {
-        var ok = mostraChiuse && (!sel.lega || m.getAttribute('data-lega') === sel.lega) &&
-                 (!sel.tipo || m.getAttribute('data-tipo') === sel.tipo);
+        var ok = mostraChiuse && (sel.lega.size === 0 || sel.lega.has(m.getAttribute('data-lega'))) &&
+                 (sel.tipo.size === 0 || sel.tipo.has(m.getAttribute('data-tipo')));
         m.style.display = ok ? '' : 'none';
       });
       var medLine = document.getElementById('clv-med-line'), medLabel = document.getElementById('clv-med-label');
@@ -434,13 +481,18 @@ SCRIPT = """
     var b = ev.target.closest ? ev.target.closest('.chip') : null;
     if (b) {
       var g = b.getAttribute('data-gruppo'), v = b.getAttribute('data-val');
-      // riclicca il filtro attivo per toglierlo
-      sel[g] = (sel[g] === v && g !== 'stato') ? '' : v;
+      if (g === 'stato') {
+        sel.stato = v;
+      } else if (v === '') {
+        sel[g].clear();
+      } else {
+        sel[g].has(v) ? sel[g].delete(v) : sel[g].add(v);
+      }
       applica();
       return;
     }
     if (ev.target.id === 'azzera') {
-      sel = { stato: 'tutte', lega: '', tipo: '' };
+      sel = { stato: 'tutte', lega: new Set(), tipo: new Set() };
       applica();
     }
   });
@@ -617,6 +669,8 @@ code{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12px;
 def costruisci(d: dict) -> str:
     clv_neg = d["clv_medio"] is not None and d["clv_medio"] < 0
     quota_pos = f"{d['clv_pos']}/{d['clv_n']}" if d["clv_n"] else "—"
+    per_lega = scomponi_chiuse(d["chiuse"], lambda x: LEGHE.get(x["lega"], x["lega"]))
+    per_tipo = scomponi_chiuse(d["chiuse"], tipo)
 
     verdetto = (
         "Il CLV medio è negativo: sulle giocate concluse la quota ottenuta era in media "
@@ -727,6 +781,21 @@ def costruisci(d: dict) -> str:
     <div class="barra-prog"><i id="affid-bar" style="width:0%"></i></div>
     <p class="nota" id="affid-testo" style="margin:0"></p>
   </div>
+</section>
+
+<section>
+  <div class="shead"><h2>Per campionato</h2></div>
+  <p class="nota">Ordinato per numero di giocate concluse, non per ROI: la fetta con più dati dietro
+  viene prima, non quella che ha reso meglio finora. Sotto le 8 giocate il ROI di quella riga può
+  ribaltarsi con la prossima — per questo è marcata "poco dati" invece che lasciata in cima solo
+  perché è nata bene. Non risente dei filtri qui sotto: è già la scomposizione completa.</p>
+  {tabella_scomposizione(per_lega, "Campionato")}
+</section>
+
+<section>
+  <div class="shead"><h2>Per mercato</h2></div>
+  <p class="nota">Stessa logica, per tipo di giocata invece che per campionato.</p>
+  {tabella_scomposizione(per_tipo, "Giocata")}
 </section>
 
 <section>
