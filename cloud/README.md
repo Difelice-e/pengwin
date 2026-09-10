@@ -96,11 +96,28 @@ Il CLV che ne deriva confronta «meglio di 20 bookmaker in apertura» con «la
 chiusura di un exchange»: una parte del segnale positivo e' garantita dal
 confronto stesso, non dal fatto che il modello anticipi il mercato.
 
-`src/ingest/betfair.py` legge le quote dall'exchange e le scrive in `q_bf_*`
-sui fixtures, **accanto** a quelle football-data e senza toccare la selezione.
-Serve a misurare di quanto si restringe l'edge prima di cambiare criterio: e'
-prevedibile che si selezionino meno giocate e con edge minore, e non sarebbe un
-peggioramento ma la fine di una sovrastima.
+Dal **10 settembre 2026** la selezione avviene sul miglior back Betfair al netto
+della commissione. E' prevedibile che si selezionino meno giocate e con edge
+minore: non e' un peggioramento, e' la fine di una sovrastima.
+
+**Le due serie non sono confrontabili.** Le giocate precedenti sono state
+scelte contro la quota massima fra ~20 bookmaker in apertura; quelle nuove
+contro il prezzo dell'exchange. ROI e CLV vanno calcolati per serie, non
+mescolati. Il marcatore e' `prezzo-betfair-comm4.5` in **`previsioni.note`**,
+che il trigger di immutabilita' protegge — non in `giocate.note`, che
+`settle.py` sovrascrive alla contabilizzazione. Le giocate si riconducono alla
+serie tramite `previsione_id`.
+
+**Il calendario arriva da Betfair.** `q_ap_max_*` di football-data resta
+comunque scritto sulla stessa riga — l'upsert usa la stessa chiave — quindi il
+confronto fra i due prezzi si puo' fare a posteriori sulle partite che
+football-data pubblica.
+
+**Quota lorda e quota netta non sono interscambiabili.** Nel ledger `quota` e'
+la **lorda**, cioe' quella che si punta: il CLV la confronta con una chiusura,
+anch'essa lorda. `edge` invece e' calcolato sulla **netta**, perche' e' quella
+che rende. Chi ricalcola `p × quota − 1` dal ledger ottiene un numero piu' alto
+dell'`edge` salvato: la differenza e' la commissione, ed e' voluta.
 
 **Sola lettura.** `listCompetitions`, `listMarketCatalogue`, `listMarketBook`.
 Nessun `placeOrders`: la fase di giocata automatica e' successiva.
@@ -264,14 +281,21 @@ pengwin_cloud/
 python -m src.ingest.football_data --stagioni 2627 --fixtures --carica
 python -m src.ingest.understat --stagioni 2026 --carica
 python -m src.report.settle --scrivi        # contabilizza le giocate concluse
-python -m src.ingest.betfair --carica       # quote Betfair, prima di selezionare
+python -m src.ingest.betfair --carica       # calendario + quote Betfair
 python -m src.report.predict                # anteprima del turno
 python -m src.report.predict --registra     # registra previsioni e giocate
 python -m src.report.dashboard out.html     # rigenera la pagina
 ```
 
 L'ordine conta: prima l'ingest, poi la contabilizzazione (che ha bisogno dei
-risultati appena scaricati), poi le previsioni.
+risultati appena scaricati), poi il passo Betfair — che porta il calendario e i
+prezzi su cui si seleziona — e solo alla fine le previsioni. `predict.py` senza
+un passo Betfair riuscito non trova quote e non seleziona nulla.
+
+`src.ingest.betfair --carica` richiede una **secret key** in `SUPABASE_KEY`:
+dopo `sql/rls_sola_lettura.sql` il ruolo `anon` e' in sola lettura, quindi con
+la publishable key la scrittura viene rifiutata con `42501`. E' il
+comportamento voluto.
 
 `settle.py` non tocca mai una giocata gia' contabilizzata *con CLV calcolato*,
 quindi si puo' rilanciare liberamente. Calcola anche il **CLV** — quota presa

@@ -1,12 +1,11 @@
 """
 Verifica delle parti pure di src/ingest/betfair.py: commissione,
-arrotondamento degli stake ai vincoli di betfair.it, aggancio del catalogo
-Betfair ai fixtures football-data.
+arrotondamento degli stake ai vincoli di betfair.it, costruzione dei fixtures
+dal catalogo Betfair.
 
 Nessuna credenziale e nessuna rete: catalogo e quote sono sintetici. Serve a
-poter cambiare `aggancia()` senza scoprire in produzione che una partita si e'
-agganciata all'evento sbagliato — il rischio che ALIAS_BETFAIR esiste per
-evitare.
+poter cambiare `fixtures_da_betfair()` senza scoprire in produzione che una
+partita e' stata inserita col nome sbagliato — cioe' duplicata.
 
     python tests/betfair.py        # dalla cartella cloud/
 """
@@ -43,36 +42,42 @@ check("stake 12.999 -> 12.50", 12.5, bf.arrotonda_stake(12.999))
 # --- batch entro i 200 punti -------------------------------------------------
 check("mercati per richiesta", 40, bf.MERCATI_PER_RICHIESTA)
 
-# --- la tabella vera: il caso Paris SG / Paris FC ---------------------------
-# Due squadre della stessa Ligue 1 con nomi vicini, di cui una sola va
-# tradotta. Se qualcuno le allinea entrambe, le quote finiscono sulla partita
-# sbagliata senza nessun errore.
+# --- la tabella vera --------------------------------------------------------
+# Paris SG e Paris FC: due squadre della stessa Ligue 1 con nomi vicini, di cui
+# una sola va tradotta. Se qualcuno le allinea entrambe, le quote finiscono
+# sulla partita sbagliata senza dare nessun errore.
 check("Paris SG -> Paris St-G", "Paris St-G", squadre.a_betfair("Paris SG"))
 check("Paris FC resta Paris FC", "Paris FC", squadre.a_betfair("Paris FC"))
+check("Paris St-G -> Paris SG (inverso)", "Paris SG", squadre.da_betfair("Paris St-G"))
 
-# --- aggancio catalogo/quote ai fixtures ------------------------------------
-# Nomi inventati, non presenti nella tabella vera: il test verifica la
-# meccanica dell'aggancio, non il contenuto di ALIAS_BETFAIR.
+# L'inversione dei nomi regge solo se la tabella e' iniettiva: due squadre
+# sullo stesso nome Betfair ne farebbero perdere una in silenzio.
+check("ALIAS_BETFAIR iniettivo", [], squadre.verifica_inverso())
+
+# --- costruzione dei fixtures dal catalogo ----------------------------------
+# Usa la mappatura vera («AC Milan» -> «Milan») invece di mutare la tabella:
+# `_INVERSO` si calcola all'import, quindi una mutazione non avrebbe effetto.
 bf.COMPETIZIONI = {"81": "I1"}
-squadre.ALIAS_BETFAIR["Prova Casa FD"] = "Prova Casa BF"
+
+APERTURA = "2026-09-13T18:45:00.000Z"    # 20:45 a Roma
+
+
+def mercato(mid, nome, evento, runners, comp="81", apertura=APERTURA):
+    return {"marketId": mid, "marketName": nome, "competition": {"id": comp},
+            "event": {"name": evento, "openDate": apertura},
+            "runners": [{"selectionId": s, "runnerName": n} for s, n in runners]}
+
 
 cat = [
-    {"marketId": "1.100", "marketName": "Match Odds",
-     "competition": {"id": "81"},
-     "event": {"name": "Prova Casa BF v Prova Ospite BF", "openDate": "2026-09-13T18:45:00.000Z"},
-     "runners": [{"selectionId": 1, "runnerName": "Prova Casa BF"},
-                 {"selectionId": 2, "runnerName": "Prova Ospite BF"},
-                 {"selectionId": 3, "runnerName": "The Draw"}]},
-    {"marketId": "1.200", "marketName": "Over/Under 2.5 Goals",
-     "competition": {"id": "81"},
-     "event": {"name": "Prova Casa BF v Prova Ospite BF", "openDate": "2026-09-13T18:45:00.000Z"},
-     "runners": [{"selectionId": 10, "runnerName": "Over 2.5 Goals"},
-                 {"selectionId": 11, "runnerName": "Under 2.5 Goals"}]},
-    # evento di un'altra competizione: deve essere ignorato
-    {"marketId": "1.300", "marketName": "Match Odds",
-     "competition": {"id": "999"},
-     "event": {"name": "Foo v Bar", "openDate": "2026-09-13T18:45:00.000Z"},
-     "runners": [{"selectionId": 20, "runnerName": "Foo"}]},
+    mercato("1.100", "Match Odds", "AC Milan v Inter",
+            [(1, "AC Milan"), (2, "Inter"), (3, "The Draw")]),
+    mercato("1.200", "Over/Under 2.5 Goals", "AC Milan v Inter",
+            [(10, "Over 2.5 Goals"), (11, "Under 2.5 Goals")]),
+    # squadra che football-data non conosce: va scartata, non inserita
+    mercato("1.400", "Match Odds", "Squadra Ignota v Inter",
+            [(30, "Squadra Ignota"), (31, "Inter"), (32, "The Draw")]),
+    # competizione fuori da COMPETIZIONI: ignorata
+    mercato("1.300", "Match Odds", "Foo v Bar", [(20, "Foo")], comp="999"),
 ]
 
 
@@ -86,20 +91,23 @@ book = {
         runner(1, 2.42, 310.0), runner(2, 3.05, 120.0), runner(3, 3.60, 88.0)]},
     "1.200": {"marketId": "1.200", "runners": [
         runner(10, 1.94, 540.0), runner(11, 2.06, 410.0)]},
+    "1.400": {"marketId": "1.400", "runners": [
+        runner(30, 2.00, 50.0), runner(31, 4.00, 50.0), runner(32, 3.50, 50.0)]},
 }
 
-fx = [{"lega": "I1", "data": "2026-09-13", "casa": "Prova Casa FD",
-       "trasferta": "Prova Ospite BF"},
-      {"lega": "I1", "data": "2026-09-13", "casa": "Roma", "trasferta": "Lazio"}]
+valide = {"I1": {"Milan", "Inter"}}
+righe, scartati = bf.fixtures_da_betfair(cat, book, valide)
 
-righe, orfani, liberi = bf.aggancia(cat, book, fx)
-
-check("righe agganciate", 1, len(righe))
-check("orfani", 1, len(orfani))
-check("orfano e' Roma-Lazio", ("Roma", "Lazio"),
-      (orfani[0]["casa"], orfani[0]["trasferta"]))
+check("fixtures costruiti", 1, len(righe))
+check("partite scartate", 1, len(scartati))
+check("lo scarto e' la squadra ignota", True, "Squadra Ignota" in scartati[0])
 
 r = righe[0]
+check("nome casa riportato a football-data", "Milan", r["casa"])
+check("nome trasferta invariato", "Inter", r["trasferta"])
+check("lega", "I1", r["lega"])
+check("data locale", "2026-09-13", r["data"])
+check("ora locale (20:45 a Roma)", "20:45:00", r["ora"])
 check("q_bf_1 (casa)", 2.42, r["q_bf_1"])
 check("q_bf_2 (trasferta)", 3.05, r["q_bf_2"])
 check("q_bf_x (pareggio)", 3.60, r["q_bf_x"])
@@ -108,23 +116,20 @@ check("q_bf_under25", 2.06, r["q_bf_under25"])
 check("market id 1x2", "1.100", r["bf_market_1x2"])
 check("market id ou25", "1.200", r["bf_market_ou25"])
 check("size in bf_raw", 310.0, r["bf_raw"]["q_bf_1"]["size"])
-check("nomi football-data conservati", ("Prova Casa FD", "Prova Ospite BF"), (r["casa"], r["trasferta"]))
 check("competizione estranea ignorata", False,
-      any("Foo" in n for n in liberi))
+      any("Foo" in s for s in scartati))
 
 # --- selezione sospesa: quota None, non zero --------------------------------
 book_sosp = {"1.100": {"marketId": "1.100", "runners": [
     runner(1, 2.42, 310.0), {"selectionId": 2, "status": "REMOVED", "ex": {}},
     runner(3, 3.60, 88.0)]}}
-righe2, _, _ = bf.aggancia([cat[0]], book_sosp, fx[:1])
+righe2, _ = bf.fixtures_da_betfair([cat[0]], book_sosp, valide)
 check("selezione rimossa -> None", None, righe2[0]["q_bf_2"])
 
-# --- nome non mappato: nessun aggancio silenziosamente sbagliato ------------
-squadre.ALIAS_BETFAIR.pop("Prova Casa FD")
-righe3, orfani3, liberi3 = bf.aggancia(cat, book, fx[:1])
-check("senza alias non aggancia", 0, len(righe3))
-check("senza alias diventa orfano", 1, len(orfani3))
-check("nome Betfair resta libero", True, "Prova Casa BF v Prova Ospite BF" in liberi3)
+# --- nessuna squadra valida: niente viene inserito --------------------------
+righe3, scartati3 = bf.fixtures_da_betfair(cat, book, {})
+check("senza elenco squadre non inserisce nulla", 0, len(righe3))
+check("e segnala tutte le partite", 2, len(scartati3))
 
 print()
 print(f"{sum(esiti)}/{len(esiti)} verifiche passate")

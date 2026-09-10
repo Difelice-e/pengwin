@@ -128,3 +128,28 @@ def verifica_betfair(nomi_fd, nomi_betfair) -> list[str]:
     """Ritorna i nomi football-data che non trovano corrispondenza su Betfair."""
     bf = set(nomi_betfair)
     return sorted({n for n in nomi_fd if a_betfair(n) not in bf})
+
+
+_INVERSO = {v: k for k, v in ALIAS_BETFAIR.items()}
+
+
+def da_betfair(nome_bf: str) -> str:
+    """Nome football-data corrispondente (identita' se non serve traduzione).
+
+    Serve perche' il calendario si legge da Betfair, che lo pubblica giorni
+    prima di football-data, mentre il modello lavora sui nomi football-data.
+    """
+    return _INVERSO.get(nome_bf, nome_bf)
+
+
+def verifica_inverso() -> list[str]:
+    """Nomi Betfair a cui corrisponderebbe piu' di un nome football-data.
+
+    L'inversione regge solo se ALIAS_BETFAIR e' iniettivo. Se qualcuno
+    aggiunge una mappatura che manda due squadre sullo stesso nome Betfair,
+    `da_betfair()` ne perderebbe una in silenzio.
+    """
+    visti: dict[str, list[str]] = {}
+    for fd, bf in ALIAS_BETFAIR.items():
+        visti.setdefault(bf, []).append(fd)
+    return sorted(bf for bf, fds in visti.items() if len(fds) > 1)

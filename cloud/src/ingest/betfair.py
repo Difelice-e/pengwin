@@ -8,9 +8,16 @@ eseguita. Leggere da Betfair allinea la misura all'esecuzione: l'edge diventa
 «il modello batte il prezzo dove gioco» e il CLV diventa Betfair-presa contro
 Betfair-chiusura, invece di un confronto fra due mercati diversi.
 
-Questo modulo NON cambia la selezione. Scrive `q_bf_*` accanto alle quote
-football-data sui fixtures e si ferma. Il confronto fra le due serie e' il
-dato che serve per decidere se cambiare criterio, e va raccolto prima.
+Il modulo e' anche la fonte del **calendario**: Betfair pubblica le partite
+giorni prima di football-data (misurato il 10/9/2026 durante la pausa per le
+nazionali: 55 partite contro 0), quindi il turno non deve piu' aspettare che
+esca `fixtures.csv`. L'upsert usa la stessa chiave dell'ingest football-data,
+percio' le due fonti confluiscono in una riga sola e `q_ap_max_*` resta
+disponibile accanto a `q_bf_*` per confrontare i due prezzi.
+
+SOLA LETTURA verso l'exchange: `listCompetitions`, `listMarketCatalogue`,
+`listMarketBook`. Nessun `placeOrders` — le giocate restano registrate nel
+ledger, la piazza reale e' una fase successiva da abilitare deliberatamente.
 
 Chiave. La **Delayed App Key** basta: e' gratuita, opera sull'exchange reale e
 permette anche di scrivere ordini; i prezzi arrivano in snapshot ritardati fra
@@ -52,7 +59,8 @@ import requests
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from src.db.client import client                              # noqa: E402
-from src.ingest.squadre import a_betfair, verifica_betfair     # noqa: E402
+from src.ingest.squadre import (a_betfair, da_betfair,         # noqa: E402
+                                verifica_betfair, verifica_inverso)
 
 # Login sul dominio italiano: l'exchange italiano ha liquidita' separata da
 # quello internazionale. Ottenuto il token, le richieste di betting vanno
@@ -216,6 +224,15 @@ def _data_locale(cat: dict) -> str | None:
     return t.astimezone(FUSO).date().isoformat()
 
 
+def _ora_locale(cat: dict) -> str | None:
+    """Ora del calcio d'inizio nel fuso di Roma."""
+    apertura = (cat.get("event") or {}).get("openDate")
+    if not apertura:
+        return None
+    t = datetime.fromisoformat(apertura.replace("Z", "+00:00"))
+    return t.astimezone(FUSO).time().isoformat()
+
+
 def _tipo_mercato(nome: str) -> str | None:
     n = (nome or "").lower()
     if n.startswith("match odds"):
@@ -223,39 +240,49 @@ def _tipo_mercato(nome: str) -> str | None:
     return "ou25" if "2.5" in n else None
 
 
-def aggancia(cat: list[dict], book: dict[str, dict],
-             fx: list[dict]) -> tuple[list[dict], list[dict], list[str]]:
-    """Unisce catalogo e quote ai fixtures football-data.
+def fixtures_da_betfair(cat: list[dict], book: dict[str, dict],
+                        squadre_valide: dict[str, set[str]],
+                        ) -> tuple[list[dict], list[str]]:
+    """Righe `fixtures` costruite dal catalogo Betfair.
 
-    L'aggancio e' su (lega, data locale, casa, trasferta) con i nomi tradotti
-    da ALIAS_BETFAIR: nessun fuzzy matching, per la ragione scritta in
-    squadre.py. Ritorna le righe pronte per l'upsert, i fixtures non agganciati
-    e i nomi evento Betfair rimasti liberi.
+    Betfair pubblica il calendario giorni prima di football-data: misurato il
+    10/9/2026 durante la pausa per le nazionali, 55 partite contro 0. Il turno
+    non deve piu' aspettare che esca `fixtures.csv`.
+
+    I nomi vengono riportati a football-data e **rifiutati** se non risultano
+    fra le squadre della stagione. Non e' pedanteria: la chiave unica della
+    tabella e' (lega, data, casa, trasferta), quindi una riga inserita con un
+    nome che football-data scrive diversamente non collide — crea una seconda
+    riga per la stessa partita, e il turno potrebbe selezionare due volte lo
+    stesso match. Meglio una partita mancante e segnalata che una doppia.
+
+    L'upsert usa la stessa chiave dell'ingest football-data, quindi le due
+    fonti confluiscono in una riga sola e `q_ap_max_*` resta disponibile per
+    il confronto fra i due prezzi.
     """
-    per_chiave: dict[tuple, dict] = {}
-    liberi: dict[tuple, str] = {}
+    eventi: dict[tuple, dict] = {}
     for c in cat:
         ev, data = _evento(c), _data_locale(c)
         if not ev or not data:
             continue
-        lega, casa, trasferta = ev
-        chiave = (lega, data, casa, trasferta)
-        liberi[chiave] = f"{casa} v {trasferta}"
-        per_chiave.setdefault(chiave, {})[c.get("marketName") or ""] = c
+        lega, casa_bf, trasferta_bf = ev
+        eventi.setdefault((lega, data, casa_bf, trasferta_bf),
+                          {})[c.get("marketName") or ""] = c
 
     righe: list[dict] = []
-    orfani: list[dict] = []
-    for f in fx:
-        chiave = (f["lega"], str(f["data"]),
-                  a_betfair(f["casa"]), a_betfair(f["trasferta"]))
-        mercati_evento = per_chiave.get(chiave)
-        if not mercati_evento:
-            orfani.append(f)
+    scartati: list[str] = []
+    for (lega, data, casa_bf, trasferta_bf), mercati_evento in sorted(eventi.items()):
+        casa, trasferta = da_betfair(casa_bf), da_betfair(trasferta_bf)
+        valide = squadre_valide.get(lega) or set()
+        ignote = [n for n in (casa, trasferta) if n not in valide]
+        if ignote:
+            scartati.append(f"{lega} {data} {casa_bf} v {trasferta_bf}"
+                            f"  -> sconosciuto a football-data: {', '.join(ignote)}")
             continue
-        liberi.pop(chiave, None)
 
-        riga = {"lega": f["lega"], "data": str(f["data"]),
-                "casa": f["casa"], "trasferta": f["trasferta"],
+        riga = {"lega": lega, "data": data,
+                "ora": _ora_locale(next(iter(mercati_evento.values()))),
+                "casa": casa, "trasferta": trasferta,
                 "bf_letto_il": datetime.now(timezone.utc).isoformat()}
         raw: dict[str, dict] = {}
 
@@ -273,7 +300,7 @@ def aggancia(cat: list[dict], book: dict[str, dict],
                     continue
                 etichetta = (desc.get("runnerName") or "").strip()
                 if tipo == "1x2":
-                    col = {chiave[2]: "q_bf_1", chiave[3]: "q_bf_2",
+                    col = {casa_bf: "q_bf_1", trasferta_bf: "q_bf_2",
                            "The Draw": "q_bf_x"}.get(etichetta)
                 elif etichetta.lower().startswith("over"):
                     col = "q_bf_over25"
@@ -290,11 +317,7 @@ def aggancia(cat: list[dict], book: dict[str, dict],
         riga["bf_raw"] = raw
         righe.append(riga)
 
-    return righe, orfani, sorted(liberi.values())
-
-
-def _etichetta(f: dict) -> str:
-    return f"{f['lega']} {f['data']} {f['casa']} - {f['trasferta']}"
+    return righe, scartati
 
 
 def nomi_betfair(cat: list[dict]) -> dict[str, set[str]]:
@@ -323,12 +346,6 @@ def nomi_football_data(db, stagione: str) -> dict[str, set[str]]:
     return out
 
 
-def _fixtures_futuri(db) -> list[dict]:
-    oggi = datetime.now(FUSO).date().isoformat()
-    return db.select("fixtures", colonne="lega,data,casa,trasferta",
-                     filtri={"data": f"gte.{oggi}"}, ordina="data.asc")
-
-
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="Quote Betfair Exchange sui fixtures")
     ap.add_argument("--competizioni", action="store_true",
@@ -339,7 +356,8 @@ def main(argv=None) -> int:
                     help="ampiezza in giorni della finestra di mercati da leggere")
     ap.add_argument("--stagione", default="2627",
                     help="stagione da cui leggere i nomi squadra per --nomi")
-    ap.add_argument("--carica", action="store_true", help="scrive q_bf_* sui fixtures")
+    ap.add_argument("--carica", action="store_true",
+                    help="scrive i fixtures con le quote Betfair su Supabase")
     a = ap.parse_args(argv)
 
     s = sessione()
@@ -378,21 +396,31 @@ def main(argv=None) -> int:
                 print(f"        {n}")
         return 0
 
-    fx = _fixtures_futuri(db)
-    if not fx:
-        print("nessun fixture futuro in tabella: lanciare prima football_data --fixtures")
+    # L'inversione dei nomi regge solo se ALIAS_BETFAIR e' iniettivo: due
+    # squadre sullo stesso nome Betfair ne farebbero perdere una in silenzio.
+    collisioni = verifica_inverso()
+    if collisioni:
+        print("[!] RIFIUTATO: ALIAS_BETFAIR non e' iniettivo, "
+              f"nomi con piu' di una corrispondenza: {', '.join(collisioni)}")
+        return 2
+
+    squadre_valide = nomi_football_data(db, a.stagione)
+    if not squadre_valide:
+        print(f"nessuna partita in `partite` per la stagione {a.stagione}: "
+              "senza l'elenco squadre non si puo' validare nessun nome")
         return 1
 
     book = prezzi(s, sorted({c["marketId"] for c in cat}))
-    righe, orfani, liberi = aggancia(cat, book, fx)
+    righe, scartati = fixtures_da_betfair(cat, book, squadre_valide)
 
-    print(f"mercati letti: {len(book)} | fixtures agganciati: {len(righe)} "
-          f"| non agganciati: {len(orfani)}")
-    if orfani:
-        print("\n[!] senza quote Betfair (nome da mappare o partita assente sull'exchange):")
-        for o in orfani[:10]:
-            print("   ", _etichetta(o))
-        print("    `--nomi` stampa le righe da aggiungere ad ALIAS_BETFAIR.")
+    print(f"mercati letti: {len(book)} | partite: {len(righe)} "
+          f"| scartate: {len(scartati)}")
+    if scartati:
+        print("\n[!] partite scartate, nome non riconducibile a football-data:")
+        for x in scartati:
+            print("   ", x)
+        print("    Aggiungere la mappatura con `--nomi` e rilanciare. Una riga")
+        print("    inserita col nome sbagliato duplicherebbe la partita.")
 
     print(f"\n{'partita':44} {'1':>6} {'X':>6} {'2':>6} {'O2.5':>6} {'U2.5':>6}")
     for r in righe:
@@ -406,8 +434,8 @@ def main(argv=None) -> int:
         return 0
 
     n = db.upsert("fixtures", righe, on_conflict="lega,data,casa,trasferta")
-    print(f"\nscritte quote Betfair su {n} fixtures")
-    db.log("betfair", "ok", n, f"{len(orfani)} non agganciati")
+    print(f"\nscritti {n} fixtures con le quote Betfair")
+    db.log("betfair", "ok", n, f"{len(scartati)} scartati")
     return 0
 
 

@@ -2,8 +2,21 @@
 Previsioni per le partite in arrivo, selezione value bet e staking Kelly
 frazionario — versione cloud. Legge da Supabase e vi scrive le previsioni.
 
-Le costanti dell'esperimento sono identiche a quelle del PC e NON vanno
-toccate a esperimento in corso (05-runbook-esperimento.md).
+Le costanti del modello sono identiche a quelle del PC e NON vanno toccate a
+esperimento in corso (05-runbook-esperimento.md): W, XI, LOOKBACK, KELLY_FRAC,
+EDGE_MIN/MAX, CAP, MAX_EXPOSURE, MAX_BETS restano quelle.
+
+Cambia invece il **prezzo di selezione**, e con esso il criterio: dal 10/9/2026
+si seleziona sul miglior back Betfair al netto della commissione, non su MaxH
+di football-data. Le giocate registrate da qui in avanti non sono confrontabili
+con le precedenti: quelle vecchie sono state scelte contro la quota massima fra
+~20 bookmaker in apertura, che e' il massimo di un campione e sovrastima
+l'edge. Il marcatore `SELEZIONE` in `previsioni.note` separa le due serie;
+ROI e CLV vanno calcolati per serie, non mescolati.
+
+Nello stesso passaggio entrano in gioco Over 2.5 e Under 2.5, che erano in
+MERCATI ma non erano mai stati giocabili perche' le colonne di prezzo
+corrispondenti non esistevano nello schema (vedi sql/quote_over_under.sql).
 
 Uso:
   python -m src.report.predict                 # anteprima, non scrive
@@ -22,6 +35,8 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from src.db.client import client                      # noqa: E402
+from src.ingest.betfair import (COMMISSIONE, arrotonda_stake,    # noqa: E402
+                                quota_netta)
 from src.model.dixon_coles_xg import fit, score_matrix, markets  # noqa: E402
 from src.report.dataset import carica, fixtures       # noqa: E402
 
@@ -33,8 +48,19 @@ MAX_EXPOSURE, MAX_BETS, MIN_MATCHES, MINBET = 0.20, 25, 8, 2.0
 MODELLO, VERSIONE = "dixon_coles_xg", "blend35-65_xi0.0018_w3y"
 FUSO = ZoneInfo("Europe/Rome")
 
-MERCATI = [("1", "H", "MaxH"), ("X", "D", "MaxD"), ("2", "A", "MaxA"),
-           ("Over 2.5", "O2.5", "MaxO25"), ("Under 2.5", "U2.5", "MaxU25")]
+# Marcatore della fonte di prezzo, scritto in `previsioni.note`, che il trigger
+# di immutabilita' protegge. NON in `giocate.note`: settle.py lo sovrascrive
+# alla contabilizzazione. Le giocate si riconducono alla fase via previsione_id.
+SELEZIONE = "prezzo-betfair-comm4.5"
+
+# Prezzo di selezione: il miglior back sull'exchange, cioe' dove la giocata
+# verra' eseguita. Prima erano MaxH/MaxO25 di football-data, la massima fra ~20
+# bookmaker e in apertura: il massimo di un campione, quindi distorto all'insu'
+# per costruzione, di un allibratore qualsiasi e non necessariamente
+# disponibile. L'edge misurato contro quel prezzo sovrastimava il vantaggio.
+MERCATI = [("1", "H", "q_bf_1"), ("X", "D", "q_bf_x"), ("2", "A", "q_bf_2"),
+           ("Over 2.5", "O2.5", "q_bf_over25"),
+           ("Under 2.5", "U2.5", "q_bf_under25")]
 SEL_DB = {"1": ("1X2", "1"), "X": ("1X2", "X"), "2": ("1X2", "2"),
           "Over 2.5": ("OU25", "over"), "Under 2.5": ("OU25", "under")}
 
@@ -116,7 +142,7 @@ def main(argv=None) -> int:
               "campionato/i con dati vecchi. Annotare il turno come degradato.")
 
     if fx.empty:
-        print("\nnessun fixture in tabella: lanciare prima l'ingest football_data --fixtures")
+        print("\nnessun fixture in tabella: lanciare prima `src.ingest.betfair --carica`")
         return 1
 
     # esclude le partite gia' iniziate o troppo imminenti (margine 15 minuti)
@@ -145,17 +171,23 @@ def main(argv=None) -> int:
             o = m.get(ocol)
             if o is None or pd.isna(o) or float(o) <= 1.01:
                 continue
+            # Due quote distinte, e non sono interscambiabili: `o` e' quella
+            # che si punta e che finisce nel ledger (il CLV la confronta con
+            # una chiusura, anch'essa lorda); `o_netta` e' quella che rende, e
+            # su un exchange la commissione si paga solo sul profitto. Usare
+            # la lorda nell'edge lo sovrastima di (o-1)*commissione.
             o = float(o)
+            o_netta = quota_netta(o)
             p = float(mk[pk])
-            edge = p * o - 1
-            f = min(kelly(p, o) * KELLY_FRAC, CAP)
-            stake = f * a.bankroll
+            edge = p * o_netta - 1
+            f = min(kelly(p, o_netta) * KELLY_FRAC, CAP)
+            stake = arrotonda_stake(f * a.bankroll)
             ok = (EDGE_MIN <= edge <= EDGE_MAX) and stake >= MINBET
             righe.append({"Div": m.Div, "MatchDate": m.MatchDate, "Time": m.Time,
                           "HomeTeam": m.HomeTeam, "AwayTeam": m.AwayTeam,
-                          "sel": sel, "p": p, "odds_max": o, "edge": edge,
+                          "sel": sel, "p": p, "quota": o, "edge": edge,
                           "sospetta": edge > EDGE_MAX,
-                          "stake": round(stake, 2) if ok else 0.0})
+                          "stake": stake if ok else 0.0})
 
     out = pd.DataFrame(righe)
     if out.empty:
@@ -172,21 +204,21 @@ def main(argv=None) -> int:
     sel = out[out.stake > 0].sort_values(["MatchDate", "edge"]).head(MAX_BETS).copy()
     tot, lim = sel.stake.sum(), MAX_EXPOSURE * a.bankroll
     if tot > lim:
-        sel["stake"] = (sel.stake * lim / tot).round(2)
+        sel["stake"] = (sel.stake * lim / tot).map(arrotonda_stake)
         sel = sel[sel.stake >= MINBET]
         print(f"esposizione riscalata da {tot:.0f} a {sel.stake.sum():.0f} EUR "
               f"(tetto {MAX_EXPOSURE:.0%})")
 
     print(f"\nrighe mercato valutate: {len(out)} | scartate {len(saltate)} partite")
     print(f"\n=== GIOCATE SELEZIONATE (edge {EDGE_MIN:.0%}-{EDGE_MAX:.0%}, "
-          f"Kelly 1/4 su {a.bankroll:.0f} EUR) ===")
+          f"Kelly 1/4 su {a.bankroll:.0f} EUR, commissione {COMMISSIONE:.1%}) ===")
     if sel.empty:
         print("nessuna")
     else:
         for _, r in sel.sort_values(["MatchDate", "Time"]).iterrows():
             print(f"{r.MatchDate.date()} {r.Div:4} "
                   f"{r.HomeTeam[:16] + ' - ' + r.AwayTeam[:16]:36} {r.sel:10} "
-                  f"p {r.p:.3f}  q {r.odds_max:5.2f}  edge {r.edge:+6.1%}  {r.stake:6.2f}")
+                  f"p {r.p:.3f}  q {r.quota:5.2f}  edge {r.edge:+6.1%}  {r.stake:6.2f}")
         print(f"\ntotale esposto: {sel.stake.sum():.2f} EUR su {len(sel)} giocate")
 
     if not a.registra:
@@ -220,8 +252,8 @@ def main(argv=None) -> int:
              "lega": r.Div, "data_partita": str(r.MatchDate.date()),
              "casa": r.HomeTeam, "trasferta": r.AwayTeam,
              "mercato": SEL_DB[r.sel][0], "selezione": SEL_DB[r.sel][1],
-             "prob": round(r.p, 6), "quota_offerta": r.odds_max,
-             "edge": round(r.edge, 6), "note": f"turno {turno}"}
+             "prob": round(r.p, 6), "quota_offerta": r.quota,
+             "edge": round(r.edge, 6), "note": f"turno {turno} · {SELEZIONE}"}
             for _, r in sel.iterrows()]
     creati = db.insert("previsioni", prev, ritorna=True)
     idx = {(p["data_partita"], p["casa"], p["trasferta"], p["mercato"], p["selezione"]): p["id"]
@@ -231,7 +263,7 @@ def main(argv=None) -> int:
                 "piazzata_il": creata, "turno": turno, "lega": r.Div,
                 "data_partita": str(r.MatchDate.date()), "casa": r.HomeTeam,
                 "trasferta": r.AwayTeam, "mercato": SEL_DB[r.sel][0],
-                "selezione": SEL_DB[r.sel][1], "quota": r.odds_max,
+                "selezione": SEL_DB[r.sel][1], "quota": r.quota,
                 "stake": r.stake, "bankroll_al_momento": a.bankroll,
                 "prob_modello": round(r.p, 6), "edge": round(r.edge, 6), "esito": "aperta"}
                for _, r in sel.iterrows()]
