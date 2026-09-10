@@ -81,16 +81,42 @@ def righe_anagrafica(nomi_fd, lega: str) -> list[dict]:
 
 # football-data -> Betfair (solo i nomi che differiscono).
 #
-# VUOTO APPOSTA. I nomi Betfair non si indovinano e un nome sbagliato non da'
-# errore: la partita non viene agganciata e la quota resta NULL, oppure —
-# peggio — si aggancia all'evento sbagliato. E' lo stesso rischio di «Paris SG»
-# vs «Paris FC» descritto sopra, su un terzo insieme di nomi.
+# Letti dall'API, non indovinati: `python -m src.ingest.betfair --nomi`
+# confronta lega per lega le squadre della stagione con i nomi evento Betfair e
+# stampa le righe da aggiungere qui. Va rilanciato a ogni nuova stagione, come
+# `verifica()` per Understat: promosse e retrocesse cambiano l'elenco.
 #
-# Si riempie con i nomi reali letti dall'API:
-#     python -m src.ingest.betfair --nomi
-# che stampa, per il turno in arrivo, i nomi football-data non agganciati
-# accanto ai nomi evento Betfair rimasti liberi.
-ALIAS_BETFAIR: dict[str, str] = {}
+# Il confronto e' per lega e non globale, e le mappature restano manuali, per
+# la stessa ragione detta sopra: «Paris SG» -> «Paris St-G», mentre «Paris FC»
+# su Betfair si chiama identico e si aggancia da solo. Un fuzzy matching
+# globale li scambierebbe senza dare errore.
+#
+# Verificato il 10/9/2026 sulla stagione 2026/27: 96 squadre, 17 differenze,
+# nessun nome rimasto libero in nessuna delle cinque leghe.
+ALIAS_BETFAIR: dict[str, str] = {
+    # Premier League
+    "Man United": "Man Utd",
+    "Nott'm Forest": "Nottm Forest",
+    # Serie A
+    "Milan": "AC Milan",
+    "Monza": "AC Monza",
+    # La Liga
+    "Ath Bilbao": "Athletic Bilbao",
+    "Ath Madrid": "Atletico Madrid",
+    "Celta": "Celta Vigo",
+    "Espanol": "Espanyol",
+    "La Coruna": "Deportivo",
+    "Santander": "Racing Santander",
+    "Sociedad": "Real Sociedad",
+    "Vallecano": "Rayo Vallecano",
+    # Bundesliga
+    "Ein Frankfurt": "Eintracht Frankfurt",
+    "Hamburg": "Hamburger SV",
+    "M'gladbach": "Mgladbach",
+    # Ligue 1  — 'Paris SG' NON e' 'Paris FC', che su Betfair si chiama uguale
+    "Paris SG": "Paris St-G",
+    "Troyes": "ESTAC Troyes",
+}
 
 
 def a_betfair(nome_fd: str) -> str:

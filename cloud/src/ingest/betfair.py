@@ -75,9 +75,17 @@ MERCATI_PER_RICHIESTA = 200 // 5
 
 # competitionId Betfair -> codice lega football-data.
 #
-# VUOTO APPOSTA: gli id non si indovinano e un id sbagliato non da' errore,
-# restituisce le partite di un altro campionato. Si riempie con --competizioni.
-COMPETIZIONI: dict[str, str] = {}
+# Letti dall'API con --competizioni il 10/9/2026, non indovinati: un id
+# sbagliato non da' errore, restituisce le partite di un altro campionato.
+# Attenzione alle seconde divisioni, che hanno nomi quasi identici e id
+# vicini: Bundesliga 2 e' 61, Ligue 2 e' 57, Segunda Division e' 12204313.
+COMPETIZIONI: dict[str, str] = {
+    "10932509": "E0",    # English Premier League
+    "81": "I1",          # Italian Serie A
+    "117": "SP1",        # Spanish La Liga
+    "59": "D1",          # German Bundesliga
+    "55": "F1",          # French Ligue 1
+}
 
 CREDENZIALI = ("BETFAIR_APP_KEY", "BETFAIR_USERNAME", "BETFAIR_PASSWORD",
                "BETFAIR_CERT", "BETFAIR_KEY")
@@ -289,6 +297,32 @@ def _etichetta(f: dict) -> str:
     return f"{f['lega']} {f['data']} {f['casa']} - {f['trasferta']}"
 
 
+def nomi_betfair(cat: list[dict]) -> dict[str, set[str]]:
+    """Nomi squadra Betfair per lega, estratti dai nomi evento del catalogo."""
+    out: dict[str, set[str]] = {}
+    for c in cat:
+        ev = _evento(c)
+        if ev:
+            lega, casa, trasferta = ev
+            out.setdefault(lega, set()).update((casa, trasferta))
+    return out
+
+
+def nomi_football_data(db, stagione: str) -> dict[str, set[str]]:
+    """Nomi squadra football-data per lega, dalle partite della stagione.
+
+    Non dai fixtures: `fixtures.csv` e' vuoto durante le pause per le
+    nazionali, mentre le squadre di una stagione sono tutte in `partite`.
+    Mappare a partire dai fixtures coprirebbe solo le venti squadre del turno
+    in arrivo, e la tabella dei nomi va riempita una volta per stagione.
+    """
+    out: dict[str, set[str]] = {}
+    for r in db.select("partite", colonne="lega,casa,trasferta",
+                       filtri={"stagione": f"eq.{stagione}"}):
+        out.setdefault(r["lega"], set()).update((r["casa"], r["trasferta"]))
+    return out
+
+
 def _fixtures_futuri(db) -> list[dict]:
     oggi = datetime.now(FUSO).date().isoformat()
     return db.select("fixtures", colonne="lega,data,casa,trasferta",
@@ -303,6 +337,8 @@ def main(argv=None) -> int:
                     help="elenca i nomi non agganciati da mappare in ALIAS_BETFAIR")
     ap.add_argument("--giorni", type=int, default=10,
                     help="ampiezza in giorni della finestra di mercati da leggere")
+    ap.add_argument("--stagione", default="2627",
+                    help="stagione da cui leggere i nomi squadra per --nomi")
     ap.add_argument("--carica", action="store_true", help="scrive q_bf_* sui fixtures")
     a = ap.parse_args(argv)
 
@@ -318,31 +354,37 @@ def main(argv=None) -> int:
         return 0
 
     db = client()
+    cat = mercati(s, a.giorni)
+
+    if a.nomi:
+        # Confronto per lega, non globale: e' l'unico modo di non proporre
+        # come candidato un nome di un altro campionato.
+        bf = nomi_betfair(cat)
+        fd = nomi_football_data(db, a.stagione)
+        for lega in sorted(fd):
+            da_mappare = verifica_betfair(fd[lega], bf.get(lega, set()))
+            liberi_lega = sorted(bf.get(lega, set()) -
+                                 {a_betfair(n) for n in fd[lega]})
+            print(f"\n=== {lega} — {len(fd[lega])} squadre football-data, "
+                  f"{len(bf.get(lega, set()))} nomi Betfair visti ===")
+            if not da_mappare:
+                print("    tutte agganciate")
+                continue
+            print(f"    da mappare ({len(da_mappare)}):")
+            for n in da_mappare:
+                print(f'        "{n}": "",')
+            print(f"    nomi Betfair liberi in questa lega ({len(liberi_lega)}):")
+            for n in liberi_lega:
+                print(f"        {n}")
+        return 0
+
     fx = _fixtures_futuri(db)
     if not fx:
         print("nessun fixture futuro in tabella: lanciare prima football_data --fixtures")
         return 1
 
-    cat = mercati(s, a.giorni)
     book = prezzi(s, sorted({c["marketId"] for c in cat}))
     righe, orfani, liberi = aggancia(cat, book, fx)
-
-    if a.nomi:
-        print(f"fixtures non agganciati: {len(orfani)}")
-        for o in orfani:
-            print("   ", _etichetta(o))
-        print(f"\nnomi evento Betfair rimasti liberi: {len(liberi)}")
-        for nome in liberi:
-            print("   ", nome)
-        # I nomi da mappare sono solo quelli dei fixtures rimasti orfani: quelli
-        # gia' agganciati sono stati rimossi da `liberi`, quindi includerli
-        # farebbe segnalare come mancanti anche le mappature corrette.
-        nomi_bf = {p.strip() for nome in liberi for p in nome.split(" v ")}
-        nomi_fd = {n for o in orfani for n in (o["casa"], o["trasferta"])}
-        print("\nrighe da aggiungere ad ALIAS_BETFAIR (il valore va scelto a mano):")
-        for n in verifica_betfair(nomi_fd, nomi_bf):
-            print(f'    "{n}": "",')
-        return 0
 
     print(f"mercati letti: {len(book)} | fixtures agganciati: {len(righe)} "
           f"| non agganciati: {len(orfani)}")

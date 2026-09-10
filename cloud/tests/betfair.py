@@ -43,20 +43,29 @@ check("stake 12.999 -> 12.50", 12.5, bf.arrotonda_stake(12.999))
 # --- batch entro i 200 punti -------------------------------------------------
 check("mercati per richiesta", 40, bf.MERCATI_PER_RICHIESTA)
 
+# --- la tabella vera: il caso Paris SG / Paris FC ---------------------------
+# Due squadre della stessa Ligue 1 con nomi vicini, di cui una sola va
+# tradotta. Se qualcuno le allinea entrambe, le quote finiscono sulla partita
+# sbagliata senza nessun errore.
+check("Paris SG -> Paris St-G", "Paris St-G", squadre.a_betfair("Paris SG"))
+check("Paris FC resta Paris FC", "Paris FC", squadre.a_betfair("Paris FC"))
+
 # --- aggancio catalogo/quote ai fixtures ------------------------------------
+# Nomi inventati, non presenti nella tabella vera: il test verifica la
+# meccanica dell'aggancio, non il contenuto di ALIAS_BETFAIR.
 bf.COMPETIZIONI = {"81": "I1"}
-squadre.ALIAS_BETFAIR.update({"Milan": "AC Milan"})
+squadre.ALIAS_BETFAIR["Prova Casa FD"] = "Prova Casa BF"
 
 cat = [
     {"marketId": "1.100", "marketName": "Match Odds",
      "competition": {"id": "81"},
-     "event": {"name": "AC Milan v Inter", "openDate": "2026-09-13T18:45:00.000Z"},
-     "runners": [{"selectionId": 1, "runnerName": "AC Milan"},
-                 {"selectionId": 2, "runnerName": "Inter"},
+     "event": {"name": "Prova Casa BF v Prova Ospite BF", "openDate": "2026-09-13T18:45:00.000Z"},
+     "runners": [{"selectionId": 1, "runnerName": "Prova Casa BF"},
+                 {"selectionId": 2, "runnerName": "Prova Ospite BF"},
                  {"selectionId": 3, "runnerName": "The Draw"}]},
     {"marketId": "1.200", "marketName": "Over/Under 2.5 Goals",
      "competition": {"id": "81"},
-     "event": {"name": "AC Milan v Inter", "openDate": "2026-09-13T18:45:00.000Z"},
+     "event": {"name": "Prova Casa BF v Prova Ospite BF", "openDate": "2026-09-13T18:45:00.000Z"},
      "runners": [{"selectionId": 10, "runnerName": "Over 2.5 Goals"},
                  {"selectionId": 11, "runnerName": "Under 2.5 Goals"}]},
     # evento di un'altra competizione: deve essere ignorato
@@ -79,7 +88,8 @@ book = {
         runner(10, 1.94, 540.0), runner(11, 2.06, 410.0)]},
 }
 
-fx = [{"lega": "I1", "data": "2026-09-13", "casa": "Milan", "trasferta": "Inter"},
+fx = [{"lega": "I1", "data": "2026-09-13", "casa": "Prova Casa FD",
+       "trasferta": "Prova Ospite BF"},
       {"lega": "I1", "data": "2026-09-13", "casa": "Roma", "trasferta": "Lazio"}]
 
 righe, orfani, liberi = bf.aggancia(cat, book, fx)
@@ -98,7 +108,7 @@ check("q_bf_under25", 2.06, r["q_bf_under25"])
 check("market id 1x2", "1.100", r["bf_market_1x2"])
 check("market id ou25", "1.200", r["bf_market_ou25"])
 check("size in bf_raw", 310.0, r["bf_raw"]["q_bf_1"]["size"])
-check("nomi football-data conservati", ("Milan", "Inter"), (r["casa"], r["trasferta"]))
+check("nomi football-data conservati", ("Prova Casa FD", "Prova Ospite BF"), (r["casa"], r["trasferta"]))
 check("competizione estranea ignorata", False,
       any("Foo" in n for n in liberi))
 
@@ -110,11 +120,11 @@ righe2, _, _ = bf.aggancia([cat[0]], book_sosp, fx[:1])
 check("selezione rimossa -> None", None, righe2[0]["q_bf_2"])
 
 # --- nome non mappato: nessun aggancio silenziosamente sbagliato ------------
-squadre.ALIAS_BETFAIR.pop("Milan")
+squadre.ALIAS_BETFAIR.pop("Prova Casa FD")
 righe3, orfani3, liberi3 = bf.aggancia(cat, book, fx[:1])
 check("senza alias non aggancia", 0, len(righe3))
 check("senza alias diventa orfano", 1, len(orfani3))
-check("nome Betfair resta libero", True, "AC Milan v Inter" in liberi3)
+check("nome Betfair resta libero", True, "Prova Casa BF v Prova Ospite BF" in liberi3)
 
 print()
 print(f"{sum(esiti)}/{len(esiti)} verifiche passate")
