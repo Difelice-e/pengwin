@@ -123,6 +123,31 @@ dell'`edge` salvato: la differenza e' la commissione, ed e' voluta.
 **Sola lettura.** `listCompetitions`, `listMarketCatalogue`, `listMarketBook`.
 Nessun `placeOrders`: la fase di giocata automatica e' successiva.
 
+## Betfair non si raggiunge da GitHub Actions
+
+Verificato il 10/9/2026: il passo Betfair su Actions termina con
+`login rifiutato: BETTING_RESTRICTED_LOCATION`. La verifica di Betfair e' sulla
+**provenienza della richiesta**, al momento del login e non della giocata, e i
+runner GitHub stanno in datacentre Azure prevalentemente negli **Stati Uniti**
+(quel job: `westcentralus`). La regione dei runner ospitati non e'
+selezionabile. Non e' una condizione da riprovare: da li' il login non
+passera' mai, con nessuna credenziale. Le stesse credenziali funzionano da una
+macchina in Italia.
+
+Conseguenza: **il percorso in avanti richiede un host in Italia.** Da quando la
+selezione avviene sui prezzi Betfair, questo non riguarda solo la raccolta
+delle quote — riguarda la registrazione del turno, perche' senza il passo
+Betfair `predict.py` non trova ne' calendario ne' quote e non seleziona nulla.
+Lo stesso vincolo valdra' a maggior ragione per `placeOrders`: e' sul percorso
+critico, non un dettaglio da sistemare dopo.
+
+Il passo nei workflow resta, e distingue i due casi: codice di uscita **3** =
+posizione non consentita, che diventa un `::warning::` e non fa fallire il job,
+cosi' il rosso resta disponibile per i guasti veri.
+
+Aggirare il blocco con un proxy o una VPN non e' una strada: viola le
+condizioni d'uso di Betfair e mette a rischio la chiusura del conto.
+
 **La Delayed App Key basta.** E' gratuita, opera sull'exchange reale e
 permetterebbe anche di scrivere ordini; i prezzi arrivano in snapshot ritardati
 fra 1 e 180 secondi, irrilevante su mercati pre-match letti il venerdi' per il

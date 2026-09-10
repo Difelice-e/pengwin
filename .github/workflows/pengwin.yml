@@ -92,4 +92,17 @@ jobs:
           printf '%s' "$BETFAIR_KEY_B64"  | base64 -d > "$RUNNER_TEMP/betfair.key"
           export BETFAIR_CERT="$RUNNER_TEMP/betfair.crt"
           export BETFAIR_KEY="$RUNNER_TEMP/betfair.key"
+          set +e
           python -m src.ingest.betfair --carica
+          rc=$?
+          set -e
+          # 3 = BETTING_RESTRICTED_LOCATION. Non e' un guasto da riprovare: i
+          # runner GitHub stanno in datacentre Azure prevalentemente negli
+          # Stati Uniti e la regione non si puo' scegliere, quindi da qui il
+          # login non passera' mai. Avviso invece di errore, cosi' il rosso
+          # resta disponibile per i guasti veri.
+          if [ $rc -eq 3 ]; then
+            echo "::warning::Betfair non raggiungibile da questo runner: posizione non consentita. Il passo va spostato su un host in Italia."
+            exit 0
+          fi
+          exit $rc

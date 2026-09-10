@@ -99,6 +99,17 @@ CREDENZIALI = ("BETFAIR_APP_KEY", "BETFAIR_USERNAME", "BETFAIR_PASSWORD",
                "BETFAIR_CERT", "BETFAIR_KEY")
 
 
+class LocazioneVietata(RuntimeError):
+    """Login rifiutato per la posizione geografica di chi chiama.
+
+    Betfair verifica la provenienza al momento del login, non della giocata, e
+    rifiuta le giurisdizioni proibite. I runner GitHub stanno in datacentre
+    Azure prevalentemente negli Stati Uniti e la regione non e' selezionabile:
+    da li' il login non passera' mai, con nessuna credenziale. Serve un host
+    in Italia. Non e' una condizione da riprovare: e' un fatto della posizione.
+    """
+
+
 def quota_netta(q: float, commissione: float = COMMISSIONE) -> float:
     """Quota equivalente al netto della commissione sulle vincite nette.
 
@@ -137,8 +148,11 @@ def sessione() -> requests.Session:
                       cert=(cert, chiave), timeout=TIMEOUT)
     r.raise_for_status()
     d = r.json()
-    if d.get("loginStatus") != "SUCCESS":
-        raise RuntimeError(f"login rifiutato: {d.get('loginStatus')}")
+    stato = d.get("loginStatus")
+    if stato == "BETTING_RESTRICTED_LOCATION":
+        raise LocazioneVietata(stato)
+    if stato != "SUCCESS":
+        raise RuntimeError(f"login rifiutato: {stato}")
 
     s = requests.Session()
     s.headers.update({"X-Application": os.environ["BETFAIR_APP_KEY"],
@@ -360,7 +374,16 @@ def main(argv=None) -> int:
                     help="scrive i fixtures con le quote Betfair su Supabase")
     a = ap.parse_args(argv)
 
-    s = sessione()
+    try:
+        s = sessione()
+    except LocazioneVietata:
+        print("[!] Betfair rifiuta il login da questa posizione "
+              "(BETTING_RESTRICTED_LOCATION).")
+        print("    La verifica e' sulla provenienza della richiesta, non sulle")
+        print("    credenziali. I runner GitHub stanno in datacentre Azure")
+        print("    prevalentemente negli Stati Uniti e la regione non si puo'")
+        print("    scegliere: serve un host in Italia. Nessuna quota letta.")
+        return 3
 
     if a.competizioni:
         righe = sorted(competizioni(s), key=lambda c: -int(c.get("marketCount") or 0))
