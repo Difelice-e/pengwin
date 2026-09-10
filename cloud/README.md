@@ -88,13 +88,14 @@ e tenere l'altra come controllo di sanita', mai mescolarle nella stessa serie.
 
 ## Quote Betfair: perche' e cosa cambia
 
-`src/report/predict.py` seleziona su `MaxH`, cioe' la quota **massima fra ~20
-bookmaker** e in **apertura**. E' il massimo di un campione, quindi distorto
-all'insu' per costruzione; e' di un allibratore qualsiasi, non necessariamente
-uno dove si puo' giocare; e non e' il prezzo dove la giocata verra' eseguita.
-Il CLV che ne deriva confronta «meglio di 20 bookmaker in apertura» con «la
-chiusura di un exchange»: una parte del segnale positivo e' garantita dal
-confronto stesso, non dal fatto che il modello anticipi il mercato.
+Fino al 9 settembre 2026 `src/report/predict.py` selezionava su `MaxH`, cioe'
+la quota **massima fra ~20 bookmaker** e in **apertura**. E' il massimo di un
+campione, quindi distorto all'insu' per costruzione; e' di un allibratore
+qualsiasi, non necessariamente uno dove si puo' giocare; e non e' il prezzo
+dove la giocata viene eseguita. Il CLV che ne derivava confrontava «meglio di
+20 bookmaker in apertura» con «la chiusura di un exchange»: una parte del
+segnale positivo era garantita dal confronto stesso, non dal fatto che il
+modello anticipi il mercato.
 
 Dal **10 settembre 2026** la selezione avviene sul miglior back Betfair al netto
 della commissione. E' prevedibile che si selezionino meno giocate e con edge
@@ -137,8 +138,7 @@ fiscali in Italia ed e' inibito da ADM. Vincoli della piazza, gia' nel codice:
 commissione **4,5%** sulle vincite nette (`quota_netta()`), stake minimo
 **2,00 EUR a multipli di 50 centesimi** (`arrotonda_stake()`, che arrotonda per
 difetto perche' il cap di Kelly e' un limite superiore), vincita potenziale
-massima 10.000 EUR. Nessuna delle due funzioni e' ancora richiamata da
-`predict.py`.
+massima 10.000 EUR. `predict.py` richiama entrambe.
 
 **Id competizione e nomi squadra si leggono, non si indovinano.** Un
 competitionId sbagliato non da' errore: restituisce le partite di un altro
