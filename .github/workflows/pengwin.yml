@@ -63,3 +63,33 @@ jobs:
       # contabilizzerebbe su risultati non aggiornati.
       - name: Contabilizza le giocate concluse
         run: python -m src.report.settle --scrivi
+
+      # Quote Betfair accanto a quelle football-data, per misurare di quanto si
+      # restringe l'edge passando dal massimo fra ~20 bookmaker al prezzo dove
+      # le giocate verranno davvero eseguite.
+      #
+      # SOLA LETTURA dall'exchange: nessun ordine. La fase di giocata
+      # automatica e' successiva e va abilitata deliberatamente.
+      #
+      # Ultimo passo e continue-on-error: questo dato serve al confronto fra le
+      # due fonti, mentre risultati e contabilizzazione sono il lavoro
+      # essenziale. Un guasto su Betfair non deve far fallire il job.
+      - name: Quote Betfair (sola lettura)
+        continue-on-error: true
+        env:
+          BETFAIR_APP_KEY: ${{ secrets.BETFAIR_APP_KEY }}
+          BETFAIR_USERNAME: ${{ secrets.BETFAIR_USERNAME }}
+          BETFAIR_PASSWORD: ${{ secrets.BETFAIR_PASSWORD }}
+          BETFAIR_CERT_B64: ${{ secrets.BETFAIR_CERT_B64 }}
+          BETFAIR_KEY_B64: ${{ secrets.BETFAIR_KEY_B64 }}
+        run: |
+          if [ -z "$BETFAIR_APP_KEY" ]; then
+            echo "::notice::Secret Betfair non configurati: passo saltato."
+            exit 0
+          fi
+          umask 077
+          printf '%s' "$BETFAIR_CERT_B64" | base64 -d > "$RUNNER_TEMP/betfair.crt"
+          printf '%s' "$BETFAIR_KEY_B64"  | base64 -d > "$RUNNER_TEMP/betfair.key"
+          export BETFAIR_CERT="$RUNNER_TEMP/betfair.crt"
+          export BETFAIR_KEY="$RUNNER_TEMP/betfair.key"
+          python -m src.ingest.betfair --carica

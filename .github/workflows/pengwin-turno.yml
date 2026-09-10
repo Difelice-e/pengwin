@@ -76,6 +76,34 @@ jobs:
       - name: Contabilizza le giocate concluse
         run: python -m src.report.settle --scrivi
 
+      # Quote Betfair PRIMA di predict, non dopo: il confronto che serve e'
+      # «al momento in cui il turno e' stato scelto, quanto valeva MaxH e
+      # quanto il prezzo Betfair». Letto dopo la registrazione, lo snapshot
+      # sarebbe di un momento diverso da quello della decisione e il confronto
+      # misurerebbe anche la deriva del mercato nel frattempo.
+      #
+      # SOLA LETTURA: nessun ordine. continue-on-error perche' registrare il
+      # turno resta il lavoro essenziale, il confronto e' un dato in piu'.
+      - name: Quote Betfair (sola lettura, prima della selezione)
+        continue-on-error: true
+        env:
+          BETFAIR_APP_KEY: ${{ secrets.BETFAIR_APP_KEY }}
+          BETFAIR_USERNAME: ${{ secrets.BETFAIR_USERNAME }}
+          BETFAIR_PASSWORD: ${{ secrets.BETFAIR_PASSWORD }}
+          BETFAIR_CERT_B64: ${{ secrets.BETFAIR_CERT_B64 }}
+          BETFAIR_KEY_B64: ${{ secrets.BETFAIR_KEY_B64 }}
+        run: |
+          if [ -z "$BETFAIR_APP_KEY" ]; then
+            echo "::notice::Secret Betfair non configurati: passo saltato."
+            exit 0
+          fi
+          umask 077
+          printf '%s' "$BETFAIR_CERT_B64" | base64 -d > "$RUNNER_TEMP/betfair.crt"
+          printf '%s' "$BETFAIR_KEY_B64"  | base64 -d > "$RUNNER_TEMP/betfair.key"
+          export BETFAIR_CERT="$RUNNER_TEMP/betfair.crt"
+          export BETFAIR_KEY="$RUNNER_TEMP/betfair.key"
+          python -m src.ingest.betfair --carica
+
       # Anteprima sempre, cosi' il log mostra cosa sarebbe stato registrato
       # anche quando il passo successivo rifiuta.
       - name: Anteprima del turno

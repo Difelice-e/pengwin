@@ -86,6 +86,79 @@ mediana 0,18 xG ma massima 2,02, e solo il 67% entro 0,3. Sono modelli diversi.
 Usarne **una sola** per la stima della forza — Understat, che ha storico dal 2014 —
 e tenere l'altra come controllo di sanita', mai mescolarle nella stessa serie.
 
+## Quote Betfair: perche' e cosa cambia
+
+`src/report/predict.py` seleziona su `MaxH`, cioe' la quota **massima fra ~20
+bookmaker** e in **apertura**. E' il massimo di un campione, quindi distorto
+all'insu' per costruzione; e' di un allibratore qualsiasi, non necessariamente
+uno dove si puo' giocare; e non e' il prezzo dove la giocata verra' eseguita.
+Il CLV che ne deriva confronta «meglio di 20 bookmaker in apertura» con «la
+chiusura di un exchange»: una parte del segnale positivo e' garantita dal
+confronto stesso, non dal fatto che il modello anticipi il mercato.
+
+`src/ingest/betfair.py` legge le quote dall'exchange e le scrive in `q_bf_*`
+sui fixtures, **accanto** a quelle football-data e senza toccare la selezione.
+Serve a misurare di quanto si restringe l'edge prima di cambiare criterio: e'
+prevedibile che si selezionino meno giocate e con edge minore, e non sarebbe un
+peggioramento ma la fine di una sovrastima.
+
+**Sola lettura.** `listCompetitions`, `listMarketCatalogue`, `listMarketBook`.
+Nessun `placeOrders`: la fase di giocata automatica e' successiva.
+
+**La Delayed App Key basta.** E' gratuita, opera sull'exchange reale e
+permetterebbe anche di scrivere ordini; i prezzi arrivano in snapshot ritardati
+fra 1 e 180 secondi, irrilevante su mercati pre-match letti il venerdi' per il
+weekend. La Live App Key (tempo reale) costa **499 GBP una tantum** e servirebbe
+solo scendendo a orizzonti brevi. Con la Delayed manca il volume scambiato: la
+size in `bf_raw` e' quella *disponibile*, non lo scambiato.
+
+**Exchange italiano.** Login su `identitysso-cert.betfair.it` con certificato
+self-signed, poi le richieste vanno agli endpoint `.com`, che restituiscono i
+mercati visibili a un conto italiano. La liquidita' e' separata da quella
+internazionale. `betfair.com` non e' un'alternativa: non accetta residenti
+fiscali in Italia ed e' inibito da ADM. Vincoli della piazza, gia' nel codice:
+commissione **4,5%** sulle vincite nette (`quota_netta()`), stake minimo
+**2,00 EUR a multipli di 50 centesimi** (`arrotonda_stake()`, che arrotonda per
+difetto perche' il cap di Kelly e' un limite superiore), vincita potenziale
+massima 10.000 EUR. Nessuna delle due funzioni e' ancora richiamata da
+`predict.py`.
+
+**Id competizione e nomi squadra si leggono, non si indovinano.** Un
+competitionId sbagliato non da' errore: restituisce le partite di un altro
+campionato, e le seconde divisioni hanno nomi quasi identici (Bundesliga 2 =
+61 contro 59, Ligue 2 = 57 contro 55). Verifica incrociata fatta il 10/9/2026:
+per ognuna delle cinque leghe l'insieme delle squadre football-data e quello
+dei nomi Betfair hanno la stessa cardinalita' (18/18, 20/20, 18/18, 20/20,
+20/20) e si accoppiano tutti.
+
+```bash
+python -m src.ingest.betfair --competizioni   # id delle leghe, per COMPETIZIONI
+python -m src.ingest.betfair --nomi           # nomi da mappare, per ALIAS_BETFAIR
+```
+
+`--nomi` legge le squadre da `partite` e non dai fixtures, e confronta **lega
+per lega**: dai fixtures si vedrebbero solo le venti squadre del turno in
+arrivo, e `fixtures.csv` e' vuoto durante le pause per le nazionali; un
+confronto globale proporrebbe come candidato il nome di un altro campionato.
+Va rilanciato a ogni nuova stagione, come `verifica()` per Understat.
+
+Il caso pericoloso si e' presentato: **`Paris SG` -> `Paris St-G`, mentre
+`Paris FC` su Betfair si chiama identico** e si aggancia da solo. Un fuzzy
+matching li scambierebbe senza dare errore, ed e' la ragione per cui
+`ALIAS_BETFAIR` e' manuale e `aggancia()` rifiuta i nomi non mappati invece di
+avvicinarsi al piu' simile: una partita non agganciata viene stampata, una
+agganciata male no.
+
+**q_bf_* non e' q_bfe_*.** `q_bf_*` e' il miglior back al momento della
+lettura (`bf_letto_il`); `q_bfe_*` e' la chiusura Betfair pubblicata da
+football-data. Stessa borsa, momenti diversi, nessun fallback fra le due.
+
+**Liquidita'.** Misurata il 10/9/2026 sulle 55 partite dei dieci giorni
+successivi: al miglior prezzo, mediana 38 EUR per partita, peggiore 12 EUR.
+Sopra il massimo stake attuale (cap 1% su bankroll 1000 = 10 EUR), ma non di
+molto: alzando il bankroll gli ordini mangeranno piu' livelli del book e la
+quota effettiva sara' peggiore di quella letta.
+
 ## Note tecniche
 
 **Perche' REST e non psycopg2.** Il container instrada solo HTTP/HTTPS attraverso un
@@ -167,12 +240,15 @@ pengwin_cloud/
 ├── requirements.txt
 ├── sql/schema.sql              -- squadre, partite, xg_partite, fixtures,
 │                                  previsioni, giocate, log_esecuzioni + viste
+├── sql/betfair_quote.sql       -- colonne q_bf_* sui fixtures (additivo)
+├── tests/betfair.py            -- verifiche senza credenziali ne' rete
 └── src/
     ├── db/client.py            -- Supabase via PostgREST
     ├── ingest/
     │   ├── football_data.py    -- risultati + quote (apertura e chiusura)
     │   ├── understat.py        -- xG per partita
-    │   └── squadre.py          -- ponte fra i nomi delle due fonti
+    │   ├── betfair.py          -- quote dall'exchange (sola lettura)
+    │   └── squadre.py          -- ponte fra i nomi delle fonti
     ├── migrate/
     │   └── ledger_import.py    -- import una tantum di ledger.csv
     ├── model/
@@ -188,6 +264,7 @@ pengwin_cloud/
 python -m src.ingest.football_data --stagioni 2627 --fixtures --carica
 python -m src.ingest.understat --stagioni 2026 --carica
 python -m src.report.settle --scrivi        # contabilizza le giocate concluse
+python -m src.ingest.betfair --carica       # quote Betfair, prima di selezionare
 python -m src.report.predict                # anteprima del turno
 python -m src.report.predict --registra     # registra previsioni e giocate
 python -m src.report.dashboard out.html     # rigenera la pagina
@@ -293,8 +370,18 @@ Il ciclo gira come workflow GitHub Actions (`.github/workflows/pengwin.yml`,
 `pengwin-turno.yml`), non come attivita' pianificata di una sessione Claude:
 
 1. `pengwin.yml` (ogni giorno, anche a mano da Actions): ingest risultati e xG,
-   carica su Supabase, contabilizza le giocate concluse;
+   carica su Supabase, contabilizza le giocate concluse, legge le quote Betfair;
 2. `pengwin-turno.yml` (il venerdi'): in piu' registra il turno successivo.
+   Qui le quote Betfair si leggono **prima** di `predict`, non dopo: il
+   confronto che serve e' fra `MaxH` e prezzo Betfair *nel momento in cui il
+   turno e' stato scelto*, altrimenti si misurerebbe anche la deriva del
+   mercato nel frattempo;
+3. `test.yml` (a ogni push): le verifiche di `tests/`, senza credenziali.
+
+Il passo Betfair e' in `continue-on-error` in entrambi i workflow: il confronto
+fra le due fonti e' un dato in piu', mentre contabilizzazione e registrazione
+del turno sono il lavoro essenziale. Se i secret Betfair non sono configurati
+il passo si salta con un avviso, senza far fallire il job.
 
 Non c'e' un passo di "rigenera e ripubblica la dashboard": `docs/index.html` legge
 Supabase da sola a ogni apertura, quindi aggiornare il database e' sufficiente.
