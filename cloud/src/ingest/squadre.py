@@ -77,3 +77,28 @@ def verifica(nomi_fd, nomi_understat) -> list[str]:
 def righe_anagrafica(nomi_fd, lega: str) -> list[dict]:
     return [{"nome_canonico": a_understat(n), "nome_football_data": n,
              "nome_understat": a_understat(n), "lega": lega} for n in sorted(set(nomi_fd))]
+
+
+# football-data -> Betfair (solo i nomi che differiscono).
+#
+# VUOTO APPOSTA. I nomi Betfair non si indovinano e un nome sbagliato non da'
+# errore: la partita non viene agganciata e la quota resta NULL, oppure —
+# peggio — si aggancia all'evento sbagliato. E' lo stesso rischio di «Paris SG»
+# vs «Paris FC» descritto sopra, su un terzo insieme di nomi.
+#
+# Si riempie con i nomi reali letti dall'API:
+#     python -m src.ingest.betfair --nomi
+# che stampa, per il turno in arrivo, i nomi football-data non agganciati
+# accanto ai nomi evento Betfair rimasti liberi.
+ALIAS_BETFAIR: dict[str, str] = {}
+
+
+def a_betfair(nome_fd: str) -> str:
+    """Nome Betfair corrispondente (identita' se non serve traduzione)."""
+    return ALIAS_BETFAIR.get(nome_fd, nome_fd)
+
+
+def verifica_betfair(nomi_fd, nomi_betfair) -> list[str]:
+    """Ritorna i nomi football-data che non trovano corrispondenza su Betfair."""
+    bf = set(nomi_betfair)
+    return sorted({n for n in nomi_fd if a_betfair(n) not in bf})

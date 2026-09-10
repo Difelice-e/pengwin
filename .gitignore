@@ -3,3 +3,8 @@ __pycache__/
 .env
 .venv/
 venv/
+
+# certificati Betfair: la chiave privata non deve mai finire nel repo
+*.crt
+*.key
+*.pem
