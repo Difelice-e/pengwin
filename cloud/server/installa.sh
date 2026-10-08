@@ -3,14 +3,16 @@
 # root, su un Ubuntu 24.04 appena creato:
 #
 #     sudo bash installa.sh
+#     sudo bash installa.sh --genera-certificato   # solo se quello del PC non c'e'
 #
 # Cosa fa, nell'ordine:
 #   1. fuso orario Europe/Rome (i turni seguono l'ora legale italiana);
 #   2. aggiornamenti di sicurezza automatici;
 #   3. firewall: entra solo SSH, esce tutto;
 #   4. utente dedicato `pengwin`, con la stessa chiave SSH di chi installa;
-#   5. cartella dei segreti ~/.betfair (700) con il modello di betfair.env,
-#      e un certificato nuovo per il login non interattivo, generato qui;
+#   5. cartella dei segreti ~/.betfair (700) con il modello di betfair.env;
+#      il certificato e' quello gia' in uso sul PC, copiato li'. Solo con
+#      --genera-certificato ne crea uno nuovo (da ricaricare su betfair.it);
 #   6. codice dal branch `server-betfair` (o `quote-betfair`) e ambiente
 #      Python isolato.
 #
@@ -96,13 +98,17 @@ else
 fi
 
 passo "5b/6 certificato per il login non interattivo"
-# Il certificato nasce qui e la chiave privata non lascia mai il server. Su
-# betfair.it si carica solo client.crt, che e' pubblico. Formato e estensioni
-# sono quelli della guida Betfair al login non interattivo (RSA 2048,
-# extendedKeyUsage = clientAuth). Se ci sono gia' entrambi, non si tocca nulla.
+# Di norma si usa il certificato gia' collegato a betfair.it, copiato dal PC in
+# ~/.betfair/client.crt e client.key. Generarne uno nuovo serve solo se quello
+# vecchio non e' raggiungibile: va chiesto esplicitamente (--genera-certificato)
+# e poi caricato su betfair.it, dove sostituisce il precedente.
 if [[ -f $SEGRETI/client.crt && -f $SEGRETI/client.key ]]; then
-    echo "certificato gia' presente: non lo rigenero"
-else
+    chown "$UTENTE:$UTENTE" "$SEGRETI"/client.*
+    chmod 600 "$SEGRETI"/client.*
+    echo "certificato presente (scade: $(openssl x509 -enddate -noout -in "$SEGRETI/client.crt" | cut -d= -f2))"
+elif [[ ${1:-} == --genera-certificato ]]; then
+    # RSA 2048 ed extendedKeyUsage = clientAuth, come da guida Betfair al login
+    # non interattivo. La chiave privata nasce qui e non lascia il server.
     sudo -u "$UTENTE" bash -c "
         set -e
         umask 077
@@ -125,9 +131,13 @@ CNF
             -extfile openssl-client.cnf -extensions ssl_client 2>/dev/null
         rm -f client.csr
     "
-    echo "certificato generato in $SEGRETI (scade: $(openssl x509 -enddate -noout -in "$SEGRETI/client.crt" | cut -d= -f2))"
-    echo "Da caricare su betfair.it: SOLO client.crt. Il contenuto e' qui sotto, e' pubblico:"
+    echo "certificato NUOVO generato (scade: $(openssl x509 -enddate -noout -in "$SEGRETI/client.crt" | cut -d= -f2))"
+    echo "Va caricato su betfair.it, dove sostituisce quello del PC. Contenuto (pubblico):"
     cat "$SEGRETI/client.crt"
+else
+    echo "[!] certificato non ancora presente in $SEGRETI."
+    echo "    Copia dal PC client.crt e client.key (vedi la fine di questo script),"
+    echo "    poi rilancia: sudo bash installa.sh"
 fi
 
 passo "6/6 codice e ambiente Python"
@@ -153,10 +163,12 @@ cat <<FINE
 Installazione completata. IP pubblico del server: $IP
 
 Prossimi passi:
-  1. su betfair.it carica il certificato $SEGRETI/client.crt
-     (stampato sopra: e' pubblico, la chiave privata resta qui);
+  1. dal PC di casa, in PowerShell, copia il certificato gia' in uso
+     (i percorsi sono quelli delle variabili BETFAIR_CERT e BETFAIR_KEY):
+       scp <percorso>\\client.crt $UTENTE@$IP:.betfair/client.crt
+       scp <percorso>\\client.key $UTENTE@$IP:.betfair/client.key
   2. entra come $UTENTE ( ssh $UTENTE@$IP ) e compila  ~/.betfair/betfair.env
      con App Key, utente e password;
-  3. prova di connessione, sola lettura:
+  3. chmod 600 ~/.betfair/*  e prova di connessione, sola lettura:
        ~/venv/bin/python $PROVA connessione
 FINE

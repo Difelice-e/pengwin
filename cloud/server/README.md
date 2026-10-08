@@ -26,20 +26,29 @@ sudo bash installa.sh
 ```
 
 Lo script imposta fuso orario e firewall, crea l'utente `pengwin` e scarica il
-codice. **Genera anche il certificato** in `~pengwin/.betfair/`: la chiave
-privata nasce sul server e non lo lascia mai. Alla fine stampa `client.crt`, che
-è pubblico.
+codice. Non tocca credenziali.
 
-## 2. Collegare il certificato a betfair.it
+## 2. Il certificato già in uso
 
-Su betfair.it → I miei dati → accesso non interattivo (bot): caricare
-`client.crt`. Sostituisce il certificato del PC, che da qui in poi non serve più.
+Si usa quello già collegato a betfair.it dal 10/9, che sta sul PC di casa (percorsi
+nelle variabili `BETFAIR_CERT` e `BETFAIR_KEY`). Da PowerShell sul PC:
+
+```powershell
+scp <percorso>\client.crt pengwin@<ip>:.betfair/client.crt
+scp <percorso>\client.key pengwin@<ip>:.betfair/client.key
+```
+
+Solo se quel certificato non fosse raggiungibile:
+`sudo bash installa.sh --genera-certificato` ne crea uno nuovo sul server. Va poi
+caricato su betfair.it → I miei dati → accesso non interattivo, dove sostituisce
+quello del PC.
 
 ## 3. Credenziali
 
 ```bash
 ssh pengwin@<ip>
 nano ~/.betfair/betfair.env      # App Key, utente, password
+chmod 600 ~/.betfair/*
 ```
 
 La **Delayed App Key** si rilegge da qualunque browser collegato a betfair.it,
@@ -90,6 +99,6 @@ Richieste e risposte (mai le credenziali) in `~/.betfair/prove/*.jsonl`.
   italiano, per i conti betfair.it non c'è costo di attivazione. La pagina
   generale invece parla di £499 addebitate **direttamente sul saldo**:
   **confermarlo per iscritto col supporto prima di richiederla.**
-- Il certificato scade dopo 2 anni (data stampata dall'installazione).
+- La scadenza del certificato la stampa `installa.sh`: annotarla.
 
 Test senza rete: `python tests/betfair_prova.py` dalla cartella `cloud/`.
