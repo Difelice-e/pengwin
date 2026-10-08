@@ -340,8 +340,12 @@ def prova_connessione(a) -> int:
         for c in esa:
             b = book.get(c["marketId"]) or {}
             per_id = {r["selectionId"]: r for r in b.get("runners", [])}
-            q = [miglior_back(per_id.get(r["selectionId"], {})) or 0
-                 for r in sorted(c["runners"], key=lambda r: r.get("sortPriority", 9))]
+            # Per nome, non per posizione: su Betfair l'ordine e' casa,
+            # trasferta, pareggio.
+            casa, trasf = (x.strip() for x in c["event"]["name"].split(" v ", 1))
+            per_nome = {r.get("runnerName"): r["selectionId"] for r in c["runners"]}
+            q = [miglior_back(per_id.get(per_nome.get(n), {})) or 0
+                 for n in (casa, "The Draw", trasf)]
             print(f"{c['event']['name'][:42]:42} {quando(c['marketStartTime']):16} "
                   + " ".join(f"{x:6.2f}" for x in q[:3]))
 
