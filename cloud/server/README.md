@@ -115,6 +115,23 @@ Richieste e risposte (mai le credenziali) in `~/.betfair/prove/*.jsonl`.
 
 ## 8. Il turno
 
+**Sempre dentro `tmux`**: se la connessione SSH cade, il programma continua a girare
+invece di essere chiuso a metà fra l'invio di un ordine e la sua registrazione.
+
+```bash
+tmux new -A -s pengwin         # rientrando dopo una disconnessione: stesso comando
+```
+
+Sul PC conviene un alias con keepalive, in `%USERPROFILE%\.ssh\config`:
+
+```
+Host pengwin
+    HostName 217.61.57.19
+    User pengwin
+    ServerAliveInterval 30
+    ServerAliveCountMax 4
+```
+
 Sul server, come `pengwin`:
 
 ```bash

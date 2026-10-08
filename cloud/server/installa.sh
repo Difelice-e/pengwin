@@ -46,7 +46,7 @@ export DEBIAN_FRONTEND=noninteractive
 APT_OPZ=(-yq -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold)
 apt-get update -q
 apt-get "${APT_OPZ[@]}" upgrade
-apt-get "${APT_OPZ[@]}" install python3-venv python3-pip git curl openssl ufw unattended-upgrades
+apt-get "${APT_OPZ[@]}" install python3-venv python3-pip git curl openssl tmux ufw unattended-upgrades
 dpkg-reconfigure -f noninteractive unattended-upgrades
 
 passo "3/6 firewall (solo SSH in ingresso)"
@@ -73,6 +73,9 @@ if [[ -n $CHIAVI ]]; then
 PasswordAuthentication no
 KbdInteractiveAuthentication no
 PermitRootLogin prohibit-password
+# Keepalive dal server: evita che router e NAT taglino le sessioni inattive
+ClientAliveInterval 30
+ClientAliveCountMax 4
 CONF
     systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || true
     echo "accesso SSH con password disattivato"
