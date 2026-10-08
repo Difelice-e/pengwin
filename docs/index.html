@@ -266,7 +266,10 @@ async function raccogli() {
   const [giocate, prereg, log] = await Promise.all([
     leggiTutto("giocate", { select: "*", order: "data_partita.asc" }),
     leggiTutto("preregistrazioni", { select: "chiave,valore" }),
+    // Esclusi i job del braccio reale (fotografie delle quote ogni 2 ore,
+    // chiusure): riempirebbero il riquadro e nasconderebbero gli ingest.
     leggi("log_esecuzioni", { select: "eseguito_il,job,esito,righe",
+                              job: "not.like.reale_*",
                               order: "eseguito_il.desc", limit: 6 })
   ]);
 
