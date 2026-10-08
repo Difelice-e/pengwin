@@ -169,15 +169,22 @@ sudo -u "$UTENTE" "$CASA/venv/bin/python" -c "import requests, pandas, scipy; pr
 IP=$(curl -s -m 10 https://api.ipify.org || echo "?")
 PROVA=$CASA/pengwin/cloud/server/betfair_prova.py
 [[ -f $PROVA ]] || PROVA="$CASA/betfair_prova.py   (copialo tu: non e' ancora nel repo)"
+if [[ -f $SEGRETI/client.crt && -f $SEGRETI/client.key ]]; then
+    PASSO1="carica su betfair.it il certificato (pubblico). Dal PC:
+       scp $UTENTE@$IP:.betfair/client.crt \$env:USERPROFILE\\Downloads\\pengwin-client.crt"
+else
+    PASSO1="copia dal PC il certificato gia' collegato a betfair.it:
+       scp <percorso>\\client.crt $UTENTE@$IP:.betfair/client.crt
+       scp <percorso>\\client.key $UTENTE@$IP:.betfair/client.key
+     (oppure rilancia con --genera-certificato)"
+fi
 cat <<FINE
 
 Installazione completata. IP pubblico del server: $IP
+Se sono stati installati aggiornamenti del kernel: reboot, poi rientra come $UTENTE.
 
 Prossimi passi:
-  1. dal PC di casa, in PowerShell, copia il certificato gia' in uso
-     (i percorsi sono quelli delle variabili BETFAIR_CERT e BETFAIR_KEY):
-       scp <percorso>\\client.crt $UTENTE@$IP:.betfair/client.crt
-       scp <percorso>\\client.key $UTENTE@$IP:.betfair/client.key
+  1. $PASSO1
   2. entra come $UTENTE ( ssh $UTENTE@$IP ) e compila  ~/.betfair/betfair.env
      con App Key, utente e password;
   3. chmod 600 ~/.betfair/*  e prova di connessione, sola lettura:
