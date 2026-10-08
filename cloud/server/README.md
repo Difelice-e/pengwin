@@ -94,11 +94,12 @@ Richieste e risposte (mai le credenziali) in `~/.betfair/prove/*.jsonl`.
 
 ## 6. Dopo
 
-- Prova d'ordine OK con la Delayed → la chiave basta per i test. Per giocare
-  davvero Betfair prevede la **Live App Key**. Secondo la pagina dell'exchange
-  italiano, per i conti betfair.it non c'è costo di attivazione. La pagina
-  generale invece parla di £499 addebitate **direttamente sul saldo**:
-  **confermarlo per iscritto col supporto prima di richiederla.**
+- **Confermato dal supporto Betfair (8/10/2026, richiesta 57870):** per i conti
+  italiani l'attivazione della **Live App Key è gratuita**, e piazzare scommesse
+  reali con la Delayed durante i test è consentito, anzi incoraggiato.
+- Dopo la prova d'ordine: richiedere la Live su developer.betfair.com → Exchange API
+  → For My Personal Betting (servono test completati e conto verificato KYC). La
+  Live non si può usare in sola lettura: va attivata quando si comincia a giocare.
 - La scadenza del certificato la stampa `installa.sh`: annotarla.
 
 Test senza rete: `python tests/betfair_prova.py` dalla cartella `cloud/`.
