@@ -145,6 +145,36 @@ check("controlla: puntata oltre i tetti fissi bloccata", True,
       any("tetti" in p for p in selezione.controlla(rotta, 400.0)))
 
 
+# --- turni infrasettimanali e Goal/No Goal ----------------------------------------
+roma = __import__("zoneinfo").ZoneInfo("Europe/Rome")
+check("turno: venerdi' 9/10 -> weekend W41", "2026-W41",
+      turno.turno_corrente(datetime(2026, 10, 9, 20, 0, tzinfo=roma)))
+check("turno: martedi' 13/10 -> infrasettimanale W42", "2026-W42-inf",
+      turno.turno_corrente(datetime(2026, 10, 13, 18, 0, tzinfo=roma)))
+check("turno: venerdi' 16/10 -> weekend W42, diverso dal martedi'", "2026-W42",
+      turno.turno_corrente(datetime(2026, 10, 16, 20, 0, tzinfo=roma)))
+check("rif_ordine weekend", "pg26W41-07", turno.rif_ordine("2026-W41", 7))
+check("rif_ordine infrasettimanale", "pg26W42i-07", turno.rif_ordine("2026-W42-inf", 7))
+
+btts = {"marketId": "1.88", "marketName": "Both teams to Score?",
+        "marketStartTime": cat[0]["marketStartTime"], "event": {"name": "Inter v AC Milan"},
+        "competition": {"id": "81"}, "runners": [{"selectionId": 30246, "runnerName": "Yes"},
+                                                {"selectionId": 110503, "runnerName": "No"}]}
+book_btts = {"1.88": {"marketId": "1.88", "status": "OPEN", "inplay": False, "runners": [
+    {"selectionId": 30246, "status": "ACTIVE", "ex": {"availableToBack": [{"price": 1.7, "size": 9}]}},
+    {"selectionId": 110503, "status": "ACTIVE", "ex": {"availableToBack": [{"price": 2.2, "size": 9}]}}]}}
+check("Goal/No Goal: riconosciuto come BTTS", "BTTS", selezione._tipo("Both teams to Score?"))
+check("Goal/No Goal: mai fra i candidati da giocare", 0,
+      len(selezione.candidati([btts], book_btts, prob, ADESSO)[0]))
+check("Goal/No Goal: presente nelle fotografie", {"BTTS"},
+      {r["mercato"] for r in quote.righe_fotografia([btts], book_btts, "periodica")})
+
+gia = [{"market_id": "1.11", "stato": "abbinata"}, {"market_id": "1.12", "stato": "respinta"}]
+restano, tolte = selezione.togli_gia_giocate(copy.deepcopy(cand), gia)
+# 1.11 = 1X2 di Inter-Milan (3 selezioni, abbinata: esclusa), 1.12 = O/U (2, respinta: resta)
+check("mercato gia' giocato escluso, respinto no", (2, 3), (len(restano), tolte))
+
+
 # --- piazzamento --------------------------------------------------------------
 class FintoDB:
     def __init__(self):

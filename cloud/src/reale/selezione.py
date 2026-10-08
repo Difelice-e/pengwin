@@ -72,7 +72,28 @@ def _tipo(nome_mercato: str) -> str | None:
     n = (nome_mercato or "").lower()
     if n.startswith("match odds"):
         return "1X2"
+    if n.startswith("both teams to score"):
+        return "BTTS"          # Goal/No Goal: solo fotografie, non si gioca
     return "OU25" if "2.5" in n else None
+
+
+# Mercati giocati con soldi veri. Il Goal/No Goal (BTTS) e' fotografato ma
+# non giocato: il modello non e' mai stato verificato su quel mercato.
+MERCATI_GIOCATI = ("1X2", "OU25")
+STATI_OCCUPATI = ("da_piazzare", "piazzata", "parziale", "abbinata", "incerta", "chiusa")
+
+
+def togli_gia_giocate(cand: list[dict], esistenti: list[dict]) -> tuple[list[dict], int]:
+    """Esclude i mercati su cui c'e' gia' una giocata reale, di qualunque turno.
+
+    Serve quando due turni guardano le stesse partite: il turno del weekend
+    legge fino a 4 giorni avanti e puo' arrivare al martedi', che e' anche il
+    giorno del turno infrasettimanale. Senza questo filtro la stessa partita
+    potrebbe essere giocata due volte con due chiavi di turno diverse.
+    """
+    occupati = {r["market_id"] for r in esistenti if r.get("stato") in STATI_OCCUPATI}
+    restano = [c for c in cand if c["market_id"] not in occupati]
+    return restano, len(cand) - len(restano)
 
 
 def candidati(cat: list[dict], book: dict[str, dict], probabilita, adesso: datetime,
@@ -92,7 +113,7 @@ def candidati(cat: list[dict], book: dict[str, dict], probabilita, adesso: datet
         lega = COMPETIZIONI.get((c.get("competition") or {}).get("id"))
         nome = (c.get("event") or {}).get("name") or ""
         tipo = _tipo(c.get("marketName"))
-        if lega not in CAMPIONATI or " v " not in nome or tipo is None:
+        if lega not in CAMPIONATI or " v " not in nome or tipo not in MERCATI_GIOCATI:
             continue
         inizio = _inizio(c)
         if inizio - adesso < MARGINE_INIZIO:

@@ -47,7 +47,7 @@ from src.model.dixon_coles_xg import markets, score_matrix         # noqa: E402
 from src.reale import api                                          # noqa: E402
 from src.reale.selezione import (CAMPIONATI, MARGINE_INIZIO,      # noqa: E402
                                  MIN_PARTITE_SQUADRA, candidati, controlla,
-                                 seleziona)
+                                 seleziona, togli_gia_giocate)
 from src.report.dataset import carica                              # noqa: E402
 from src.report.predict import MAX_ETA, VERSIONE, build_models      # noqa: E402
 
@@ -57,13 +57,24 @@ PREREGISTRAZIONE = "braccio_reale"
 
 
 def turno_corrente(ora: datetime) -> str:
-    anno, settimana, _ = ora.isocalendar()
-    return f"{anno}-W{settimana:02d}"
+    """'2026-W42' per il turno del weekend (da venerdi' a domenica),
+    '2026-W42-inf' per quello infrasettimanale (da lunedi' a giovedi').
+
+    La settimana ISO va da lunedi' a domenica: un martedi' e il weekend
+    successivo cadono nella stessa settimana, quindi senza il suffisso il
+    secondo turno verrebbe rifiutato come gia' giocato.
+    """
+    anno, settimana, giorno = ora.isocalendar()
+    return f"{anno}-W{settimana:02d}" + ("-inf" if giorno <= 4 else "")
 
 
 def rif_ordine(turno: str, i: int) -> str:
-    """customerOrderRef: unico per giocata, al massimo 32 caratteri."""
-    return f"pg{turno[2:4]}{turno[-3:]}-{i:02d}"
+    """customerOrderRef: unico per giocata, al massimo 32 caratteri.
+
+    '2026-W41' -> 'pg26W41-07', '2026-W42-inf' -> 'pg26W42i-07'.
+    """
+    settimana = turno[5:8]
+    return f"pg{turno[2:4]}{settimana}{'i' if turno.endswith('-inf') else ''}-{i:02d}"
 
 
 # ------------------------------------------------------------------ modello
@@ -339,6 +350,17 @@ def main(argv=None) -> int:
     cat = api.catalogo(s, MARGINE_INIZIO, timedelta(days=a.giorni), leghe=CAMPIONATI)
     book = api.libri(s, sorted({c["marketId"] for c in cat}))
     cand, scartate = candidati(cat, book, probabilita_dal_modello(models), letti_il)
+    try:
+        future = db.select("giocate_reali", colonne="market_id,stato",
+                           filtri={"inizio": f"gt.{letti_il.isoformat()}"})
+    except Exception as e:                                   # noqa: BLE001
+        if a.invia:
+            raise
+        print(f"(giocate gia' fatte non lette: {str(e)[:80]})")
+        future = []
+    cand, doppie = togli_gia_giocate(cand, future)
+    if doppie:
+        print(f"escluse {doppie} selezioni su mercati gia' giocati in un turno precedente")
 
     eventi = {}
     for c in cat:

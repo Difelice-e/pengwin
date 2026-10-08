@@ -7,7 +7,9 @@ Fotografie delle quote betfair.it e quota di chiusura delle giocate reali.
 Due usi diversi, stesso dato.
 
 `--fotografa` (ogni 2 ore, timer systemd) scrive in `quote_snapshot` miglior
-back e miglior lay di ogni selezione 1X2 e Over/Under 2.5. Non gioca e non
+back e miglior lay di ogni selezione 1X2, Over/Under 2.5 e Goal/No Goal (BTTS)
+dei cinque campionati. Il Goal/No Goal non si gioca: si fotografa per
+valutarlo su carta. Non gioca e non
 sceglie nulla: e' l'archivio per decidere *quando* conviene piazzare. Fra
 qualche settimana dira' a che distanza dal via i prezzi delle nostre selezioni
 battono la chiusura. Una regola sul momento si decide con questi dati e si
@@ -66,7 +68,10 @@ def righe_fotografia(cat: list[dict], book: dict[str, dict], motivo: str) -> lis
 
 
 def fotografa(s, db, giorni: int) -> int:
-    cat = api.catalogo(s, timedelta(0), timedelta(days=giorni))
+    # 1X2 e Over/Under 2.5 si giocano; Goal/No Goal si fotografa soltanto,
+    # per valutarlo su carta prima di decidere se giocarlo.
+    cat = api.catalogo(s, timedelta(0), timedelta(days=giorni),
+                       tipi=("MATCH_ODDS", "OVER_UNDER_25", "BOTH_TEAMS_TO_SCORE"))
     book = api.libri(s, sorted({c["marketId"] for c in cat}))
     righe = righe_fotografia(cat, book, "periodica")
     n = db.insert("quote_snapshot", righe) if righe else 0

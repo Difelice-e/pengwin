@@ -177,6 +177,7 @@ select 'braccio_reale',
   "campionati": ["E0", "I1"],
   "campionati_motivazione": "scelta dell'utente dell'8/10/2026, dopo i primi 4 turni su carta (Premier ROI +45%, Serie A +30%, altri tre negativi). E' una selezione a posteriori: nella nota 17 il migliore dei 10 segmenti aveva p = 0,165 dopo la correzione per confronti multipli. Quei turni NON contano come evidenza: l'ipotesi 'Premier + Serie A' si valuta solo sulle giocate reali da qui in avanti",
   "mercati": ["1X2", "OU25"],
+  "goal_no_goal": "NON si gioca. Si fotografa ogni 2 ore in quote_snapshot sui cinque campionati, per una valutazione su carta (probabilita' del modello contro prezzi Betfair alla chiusura) da pre-registrare a parte prima di qualunque giocata reale: il modello non e' mai stato verificato su questo mercato",
   "prezzo": "miglior back su betfair.it letto subito prima dell'invio; ordine LIMIT a quella quota, persistenza LAPSE (cio' che non e' abbinato decade al fischio d'inizio); mai in-play",
   "commissione": 0.045,
   "selezione": "edge calcolato sulla quota NETTA della commissione, banda 2%-10%; solo quote fra 1,20 e 15; minimo 8 partite per squadra nella finestra di stima",
@@ -201,7 +202,7 @@ select 'braccio_reale',
   },
   "turni": {
     "weekend": true,
-    "infrasettimanali": "no finche' il piazzamento richiede conferma manuale; si attivano col piazzamento automatico, annotandolo",
+    "infrasettimanali": "si': si giocano anche le giornate infrasettimanali di Premier e Serie A, con le stesse regole e, finche' resta, la stessa conferma manuale. Turno identificato come AAAA-Wnn-inf; un mercato gia' giocato in un turno precedente non si rigioca",
     "momento": "all'invio confermato dall'utente, il venerdi' sera; una regola diversa sul momento va decisa coi dati di quote_snapshot e pre-registrata a parte"
   },
   "clv": {
