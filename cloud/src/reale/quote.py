@@ -81,6 +81,11 @@ def fotografa(s, db, giorni: int) -> int:
 
 
 def chiusura(db, sessione_factory, adesso: datetime | None = None) -> int:
+    """Quota di chiusura per le giocate reali e per quelle su carta Goal/No Goal.
+
+    Le due parti sono indipendenti: un errore sulla carta non ferma mai quella
+    reale, che gira per prima.
+    """
     adesso = adesso or datetime.now(timezone.utc)
     aperte = db.select("giocate_reali", colonne="*", filtri={
         "stato": f"in.({','.join(APERTE)})",
@@ -88,10 +93,22 @@ def chiusura(db, sessione_factory, adesso: datetime | None = None) -> int:
     })
     aperte = [r for r in aperte
               if datetime.fromisoformat(r["inizio"].replace("Z", "+00:00")) > adesso]
-    if not aperte:
+    carta = carta_in_partenza(db, adesso)
+    if not aperte and not carta:
         return 0
     s = sessione_factory()
+    if aperte:
+        chiusura_reali(s, db, aperte, adesso)
+    if carta:
+        try:
+            chiusura_carta(s, db, carta, adesso)
+        except Exception as e:                               # noqa: BLE001
+            print(f"[!] chiusura Goal/No Goal su carta: {e}")
+            db.log("carta_btts_chiusura", "errore", 0, str(e)[:500])
+    return 0
 
+
+def chiusura_reali(s, db, aperte: list[dict], adesso: datetime) -> None:
     # 1. stato degli ordini: importo e quota abbinati fino a questo momento
     bet_ids = [r["bet_id"] for r in aperte if r.get("bet_id")]
     ordini = {}
@@ -134,7 +151,37 @@ def chiusura(db, sessione_factory, adesso: datetime | None = None) -> int:
         db.insert("quote_snapshot", righe)
     print(f"chiusura: {len(aperte)} giocate aggiornate su {len(market_ids)} mercati")
     db.log("reale_chiusura", "ok", len(aperte), "")
-    return 0
+
+
+def carta_in_partenza(db, adesso: datetime) -> list[dict]:
+    """Giocate su carta Goal/No Goal che iniziano entro FINESTRA_CHIUSURA."""
+    try:
+        righe = db.select("carta_btts", colonne="*", filtri={
+            "esito": "is.null",
+            "inizio": f"lte.{(adesso + FINESTRA_CHIUSURA).isoformat()}",
+        })
+    except Exception:                                        # noqa: BLE001
+        return []          # tabella non ancora creata: niente da fare
+    return [r for r in righe
+            if datetime.fromisoformat(r["inizio"].replace("Z", "+00:00")) > adesso]
+
+
+def chiusura_carta(s, db, carta: list[dict], adesso: datetime) -> None:
+    """Miglior back adesso come quota di chiusura; ogni passaggio la sovrascrive."""
+    book = api.libri(s, sorted({r["market_id"] for r in carta}))
+    for r in carta:
+        b = book.get(r["market_id"]) or {}
+        if b.get("status") != "OPEN" or b.get("inplay"):
+            continue
+        runner = next((x for x in b.get("runners", [])
+                       if x["selectionId"] == int(r["selection_id"])), {})
+        back, _ = api.migliore(runner, "availableToBack")
+        if back:
+            db.update("carta_btts", {"id": f"eq.{r['id']}"}, {
+                "quota_chiusura": back, "chiusura_il": adesso.isoformat(),
+                "chiusura_fonte": "diretta",
+                "clv": round(float(r["quota"]) / back - 1, 6)})
+    print(f"chiusura Goal/No Goal su carta: {len(carta)} giocate")
 
 
 def main(argv=None) -> int:

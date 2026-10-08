@@ -1,0 +1,9 @@
+[Unit]
+Description=Pengwin - contabilizzazione Goal/No Goal su carta, ogni giorno dopo l'ingest dei risultati
+
+[Timer]
+OnCalendar=*-*-* 16:15:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

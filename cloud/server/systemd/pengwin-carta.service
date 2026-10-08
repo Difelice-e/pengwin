@@ -1,0 +1,12 @@
+[Unit]
+Description=Pengwin - contabilizzazione del Goal/No Goal su carta (nessun denaro)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=pengwin
+WorkingDirectory=/home/pengwin/pengwin/cloud
+Environment=TZ=Europe/Rome
+ExecStart=/home/pengwin/venv/bin/python -m src.reale.carta_btts --contabilizza
+TimeoutStartSec=300

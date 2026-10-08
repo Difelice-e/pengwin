@@ -110,7 +110,10 @@ Richieste e risposte (mai le credenziali) in `~/.betfair/prove/*.jsonl`.
 2. **Secret key** di Supabase (Settings → API Keys, `sb_secret_...`) in
    `~/.betfair/betfair.env` alla riga `SUPABASE_KEY=`. La publishable non può
    scrivere le tabelle del braccio reale, che non sono leggibili da fuori.
-3. Timer (fotografie ogni 2 ore, chiusure ogni 5 minuti — nessuno dei due gioca):
+3. Supabase → SQL Editor: anche `cloud/sql/carta_btts.sql` (Goal/No Goal su carta).
+4. Timer (fotografie ogni 2 ore, chiusure ogni 5 minuti, contabilizzazione del Goal/No Goal
+   ogni giorno alle 16:15 — nessuno gioca). Va rilanciato dopo ogni `git pull` che aggiunge
+   un timer:
    `sudo bash ~pengwin/pengwin/cloud/server/attiva_timer.sh`
 
 ## 8. Il turno
@@ -156,10 +159,21 @@ LAPSE). I prezzi valgono 10 minuti: se si conferma dopo, rifiuta e si rilancia.
 | 3 | posizione geografica rifiutata da Betfair |
 | 4 | inviato con giocate **respinte o incerte**: guardare `giocate_reali` e betfair.it |
 
+Subito dopo, il **Goal/No Goal su carta** (nessun denaro, cinque campionati):
+
+```bash
+~/venv/bin/python -m src.reale.carta_btts --consenti-dati-vecchi              # anteprima
+~/venv/bin/python -m src.reale.carta_btts --registra --consenti-dati-vecchi   # registra
+```
+
+Regole in `preregistrazioni.carta_btts` (`sql/carta_btts.sql`, da lanciare una volta in
+Supabase). Chiusure e contabilizzazione le fanno i timer; i risultati compaiono in una
+sezione separata della dashboard.
+
 Se si interrompe a metà: `--invia --riprendi` invia solo le giocate rimaste
 `da_piazzare` o `incerta`, dopo aver chiesto a Betfair quali ordini esistono già.
 Non manda mai due volte lo stesso ordine.
 
 Log di ogni ordine: tabella `ordini_log` e copia locale in `~/.betfair/ordini/`.
 
-Test senza rete, dalla cartella `cloud/`: `python tests/betfair_prova.py` e `python tests/reale.py`.
+Test senza rete, dalla cartella `cloud/`: `python tests/betfair_prova.py`, `python tests/reale.py`, `python tests/carta_btts.py`.
