@@ -66,10 +66,15 @@ def saldo(s: requests.Session) -> dict:
             "totale": round(disponibile + esposizione, 2)}
 
 
-def catalogo(s, da: timedelta, a: timedelta, tipi=("MATCH_ODDS", "OVER_UNDER_25")) -> list[dict]:
-    """Mercati dei cinque campionati con calcio d'inizio fra adesso+da e adesso+a."""
+def catalogo(s, da: timedelta, a: timedelta, tipi=("MATCH_ODDS", "OVER_UNDER_25"),
+             leghe=None) -> list[dict]:
+    """Mercati con calcio d'inizio fra adesso+da e adesso+a.
+
+    `leghe`: codici football-data (es. ("E0", "I1")); di default i cinque.
+    """
     ora = datetime.now(timezone.utc)
-    filtro = {"eventTypeIds": ["1"], "competitionIds": sorted(COMPETIZIONI),
+    ids = sorted(k for k, v in COMPETIZIONI.items() if leghe is None or v in leghe)
+    filtro = {"eventTypeIds": ["1"], "competitionIds": ids,
               "marketTypeCodes": list(tipi),
               "marketStartTime": {"from": (ora + da).isoformat(),
                                   "to": (ora + a).isoformat()}}

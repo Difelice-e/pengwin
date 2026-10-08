@@ -26,6 +26,13 @@ from src.ingest.betfair import (COMPETIZIONI, arrotonda_stake,        # noqa: E4
 from src.ingest.squadre import da_betfair                            # noqa: E402
 
 # Regole pre-registrate. Cambiarle vuol dire una nuova pre-registrazione.
+
+# Campionati giocati con soldi veri: Premier e Serie A, scelta dell'utente
+# dell'8/10/2026 dopo i primi quattro turni su carta. E' una selezione a
+# posteriori e la pre-registrazione lo dichiara: quei turni non contano come
+# evidenza, l'ipotesi si valuta solo sulle giocate da qui in avanti.
+# Le fotografie delle quote (quote.py) restano sui cinque campionati.
+CAMPIONATI = ("E0", "I1")
 EDGE_MIN, EDGE_MAX = 0.02, 0.10
 KELLY_FRAC = 0.25
 TETTO_GIOCATA = 0.01          # frazione del saldo
@@ -85,7 +92,7 @@ def candidati(cat: list[dict], book: dict[str, dict], probabilita, adesso: datet
         lega = COMPETIZIONI.get((c.get("competition") or {}).get("id"))
         nome = (c.get("event") or {}).get("name") or ""
         tipo = _tipo(c.get("marketName"))
-        if not lega or " v " not in nome or tipo is None:
+        if lega not in CAMPIONATI or " v " not in nome or tipo is None:
             continue
         inizio = _inizio(c)
         if inizio - adesso < MARGINE_INIZIO:

@@ -45,8 +45,9 @@ from src.db.client import client                                  # noqa: E402
 from src.ingest.betfair import LocazioneVietata                    # noqa: E402
 from src.model.dixon_coles_xg import markets, score_matrix         # noqa: E402
 from src.reale import api                                          # noqa: E402
-from src.reale.selezione import (MARGINE_INIZIO, MIN_PARTITE_SQUADRA,  # noqa: E402
-                                 candidati, controlla, seleziona)
+from src.reale.selezione import (CAMPIONATI, MARGINE_INIZIO,      # noqa: E402
+                                 MIN_PARTITE_SQUADRA, candidati, controlla,
+                                 seleziona)
 from src.report.dataset import carica                              # noqa: E402
 from src.report.predict import MAX_ETA, VERSIONE, build_models      # noqa: E402
 
@@ -322,7 +323,7 @@ def main(argv=None) -> int:
 
     # --- modello
     oggi = pd.Timestamp(ora.date())
-    models = build_models(carica(db), oggi)
+    models = {k: v for k, v in build_models(carica(db), oggi).items() if k in CAMPIONATI}
     for k, v in sorted(models.items()):
         eta = (oggi - v[4]).days
         print(f"  modello {k:<4} {v[2]:>4} partite, ultima {v[4].date()} ({eta} giorni fa)"
@@ -335,7 +336,7 @@ def main(argv=None) -> int:
 
     # --- prezzi
     letti_il = datetime.now(timezone.utc)
-    cat = api.catalogo(s, MARGINE_INIZIO, timedelta(days=a.giorni))
+    cat = api.catalogo(s, MARGINE_INIZIO, timedelta(days=a.giorni), leghe=CAMPIONATI)
     book = api.libri(s, sorted({c["marketId"] for c in cat}))
     cand, scartate = candidati(cat, book, probabilita_dal_modello(models), letti_il)
 

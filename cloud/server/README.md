@@ -5,7 +5,9 @@ GitHub (Stati Uniti) il login esce `BETTING_RESTRICTED_LOCATION`. Il server
 serve a questo e solo a questo: prezzi betfair.it, giocate reali, chiusure.
 Ingest di risultati e xG e il braccio su carta restano su GitHub Actions.
 
-Le sezioni 1-5 sono la messa in opera (una volta). La 7 è il turno reale.
+Le sezioni 1-5 sono la messa in opera (una volta). La 7 e la 8 sono il turno reale,
+che gioca **solo Premier League e Serie A** (decisione dell'8/10/2026); le
+fotografie delle quote restano sui cinque campionati.
 
 ## 0. Il server
 

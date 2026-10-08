@@ -91,6 +91,13 @@ check("candidati: 1 / X / 2 sulle quote giuste", {"1": 1.95, "2": 3.6, "X": 4.5}
 check("candidati: over / under", {"over": 1.70, "under": 2.2},
       {c["selezione"]: c["quota"] for c in cand if c["mercato"] == "OU25"})
 
+c3, b3 = evento(5, "Bayern Munich", "Dortmund", 26, (1.6, 4.5, 5.0), (3.0, 1.4), comp="59")
+check("candidati: Bundesliga esclusa (solo Premier e Serie A)", 0,
+      len(selezione.candidati(c3, b3, lambda *a: MODELLO[("I1", "Inter", "Milan")], ADESSO)[0]))
+c4, b4 = evento(6, "Arsenal", "Leeds", 26, (1.4, 5.3, 9.2), (2.5, 1.6), comp="10932509")
+check("candidati: Premier inclusa", 5,
+      len(selezione.candidati(c4, b4, lambda *a: MODELLO[("I1", "Inter", "Milan")], ADESSO)[0]))
+
 c2, b2 = evento(4, "Inter", "Milan", 26, (1.95, 4.5, 3.6), (2.2, 1.7), inplay=True)
 check("candidati: mercato in-play escluso", 0, len(selezione.candidati(c2, b2, prob, ADESSO)[0]))
 

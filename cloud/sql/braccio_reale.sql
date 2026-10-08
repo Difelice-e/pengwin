@@ -1,5 +1,5 @@
 -- =====================================================================
--- Pengwin — braccio REALE su betfair.it (8 ottobre 2026)
+-- Pengwin — braccio REALE su betfair.it (8 ottobre 2026): Premier e Serie A
 --
 -- Da lanciare UNA volta nel SQL Editor di Supabase. Idempotente: rieseguirlo
 -- non duplica nulla e non tocca le righe gia' scritte.
@@ -174,7 +174,8 @@ select 'braccio_reale',
 {
   "registrata_il": "2026-10-08",
   "versione_modello": "blend35-65_xi0.0018_w3y",
-  "campionati": ["E0", "I1", "SP1", "D1", "F1"],
+  "campionati": ["E0", "I1"],
+  "campionati_motivazione": "scelta dell'utente dell'8/10/2026, dopo i primi 4 turni su carta (Premier ROI +45%, Serie A +30%, altri tre negativi). E' una selezione a posteriori: nella nota 17 il migliore dei 10 segmenti aveva p = 0,165 dopo la correzione per confronti multipli. Quei turni NON contano come evidenza: l'ipotesi 'Premier + Serie A' si valuta solo sulle giocate reali da qui in avanti",
   "mercati": ["1X2", "OU25"],
   "prezzo": "miglior back su betfair.it letto subito prima dell'invio; ordine LIMIT a quella quota, persistenza LAPSE (cio' che non e' abbinato decade al fischio d'inizio); mai in-play",
   "commissione": 0.045,
@@ -212,10 +213,10 @@ select 'braccio_reale',
     "casi_intermedi": "si prosegue fino a 300 giocate, poi si decide"
   },
   "attese_se_ha_ragione_il_mercato": {
-    "valore_atteso_per_euro_giocato": -0.029,
-    "saldo_a_fine_stagione_su_iniziale": {"mediana": 0.80, "p5": 0.52, "p95": 1.24},
-    "probabilita_di_chiudere_in_utile": 0.20,
-    "fonte": "nota 17 par.7: simulazione 500 EUR, 33 turni, prezzi Betfair netti, puntate sul saldo; espressa in proporzione al bankroll iniziale"
+    "valore_atteso_per_euro_giocato": -0.018,
+    "fonte": "nota 17 par.6: valore atteso Betfair netto Premier -2,95% (28 giocate) e Serie A -0,62% (29), media pesata",
+    "giocate_per_turno_attese": "circa 10-14, contro le 25 dei cinque campionati",
+    "nota": "la simulazione del saldo a fine stagione della nota 17 par.7 era sui cinque campionati e non e' stata ricalcolata: con meno giocate la dispersione del saldo e' minore"
   },
   "pnl": "non e' un criterio: servono circa 4.000 giocate per distinguere un vantaggio del 2% da zero"
 }
