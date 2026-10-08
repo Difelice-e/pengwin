@@ -41,9 +41,12 @@ timedatectl | grep -i 'time zone'
 
 passo "2/6 pacchetti e aggiornamenti automatici"
 export DEBIAN_FRONTEND=noninteractive
+# I file di configurazione modificati dal provider (es. /etc/cloud/cloud.cfg
+# di Aruba) si TENGONO: senza queste opzioni dpkg si ferma a chiedere.
+APT_OPZ=(-yq -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold)
 apt-get update -q
-apt-get -yq upgrade
-apt-get -yq install python3-venv python3-pip git curl openssl ufw unattended-upgrades
+apt-get "${APT_OPZ[@]}" upgrade
+apt-get "${APT_OPZ[@]}" install python3-venv python3-pip git curl openssl ufw unattended-upgrades
 dpkg-reconfigure -f noninteractive unattended-upgrades
 
 passo "3/6 firewall (solo SSH in ingresso)"
