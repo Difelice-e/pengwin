@@ -1,0 +1,10 @@
+[Unit]
+Description=Pengwin - fotografia delle quote ogni 2 ore
+
+[Timer]
+OnCalendar=*-*-* 00/2:07:00
+Persistent=true
+RandomizedDelaySec=60
+
+[Install]
+WantedBy=timers.target

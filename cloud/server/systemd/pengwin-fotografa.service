@@ -1,0 +1,12 @@
+[Unit]
+Description=Pengwin - fotografia delle quote betfair.it (solo lettura)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=pengwin
+WorkingDirectory=/home/pengwin/pengwin/cloud
+Environment=TZ=Europe/Rome
+ExecStart=/home/pengwin/venv/bin/python -m src.reale.quote --fotografa
+TimeoutStartSec=300

@@ -1,13 +1,11 @@
-# Server italiano — installazione e prove con Betfair
+# Server italiano — installazione, prove e braccio reale su betfair.it
 
 Betfair accetta login e ordini solo da IP localizzati in Italia: dai runner di
 GitHub (Stati Uniti) il login esce `BETTING_RESTRICTED_LOCATION`. Il server
-serve a questo e solo a questo. Ingest, contabilizzazione e dashboard restano
-su GitHub Actions.
+serve a questo e solo a questo: prezzi betfair.it, giocate reali, chiusure.
+Ingest di risultati e xG e il braccio su carta restano su GitHub Actions.
 
-Queste prove **non giocano il modello** e **non scrivono su Supabase**. Dicono
-due cose: se Betfair accetta il server, e se il conto può piazzare ordini con
-la chiave attuale.
+Le sezioni 1-5 sono la messa in opera (una volta). La 7 è il turno reale.
 
 ## 0. Il server
 
@@ -102,4 +100,47 @@ Richieste e risposte (mai le credenziali) in `~/.betfair/prove/*.jsonl`.
   Live non si può usare in sola lettura: va attivata quando si comincia a giocare.
 - La scadenza del certificato la stampa `installa.sh`: annotarla.
 
-Test senza rete: `python tests/betfair_prova.py` dalla cartella `cloud/`.
+## 7. Braccio reale — una volta, prima del primo turno
+
+1. **Supabase → SQL Editor → New query**: incollare `cloud/sql/braccio_reale.sql`
+   e lanciarlo. Crea `giocate_reali`, `ordini_log`, `quote_snapshot` e scrive la
+   **pre-registrazione** `braccio_reale`. Va riletta prima: dopo non si cambia.
+2. **Secret key** di Supabase (Settings → API Keys, `sb_secret_...`) in
+   `~/.betfair/betfair.env` alla riga `SUPABASE_KEY=`. La publishable non può
+   scrivere le tabelle del braccio reale, che non sono leggibili da fuori.
+3. Timer (fotografie ogni 2 ore, chiusure ogni 5 minuti — nessuno dei due gioca):
+   `sudo bash ~pengwin/pengwin/cloud/server/attiva_timer.sh`
+
+## 8. Il turno
+
+Sul server, come `pengwin`:
+
+```bash
+cd ~/pengwin && git pull && cd cloud
+~/venv/bin/python -m src.reale.turno --consenti-dati-vecchi            # anteprima
+~/venv/bin/python -m src.reale.turno --invia --consenti-dati-vecchi    # gioca, chiede GIOCA
+```
+
+`--consenti-dati-vecchi` serve solo quando l'ultima giornata giocata è di oltre
+10 giorni fa per una **sosta** (come il 9/10). In un weekend normale non si mette:
+se il programma rifiuta, è un buco nei dati e il turno si salta.
+
+L'anteprima non scrive niente: saldo, modello, partite trovate su Betfair e
+valutate, giocate con quota, edge e puntata. `--invia` rifà tutto, chiede di
+scrivere `GIOCA`, registra le decisioni e poi piazza (LIMIT alla quota letta,
+LAPSE). I prezzi valgono 10 minuti: se si conferma dopo, rifiuta e si rilancia.
+
+| Uscita | Significato |
+|---|---|
+| 0 | tutto inviato (o anteprima pulita) |
+| 2 | rifiutato: turno già giocato, dati vecchi, pre-registrazione mancante, conferma non data, controlli fissi |
+| 3 | posizione geografica rifiutata da Betfair |
+| 4 | inviato con giocate **respinte o incerte**: guardare `giocate_reali` e betfair.it |
+
+Se si interrompe a metà: `--invia --riprendi` invia solo le giocate rimaste
+`da_piazzare` o `incerta`, dopo aver chiesto a Betfair quali ordini esistono già.
+Non manda mai due volte lo stesso ordine.
+
+Log di ogni ordine: tabella `ordini_log` e copia locale in `~/.betfair/ordini/`.
+
+Test senza rete, dalla cartella `cloud/`: `python tests/betfair_prova.py` e `python tests/reale.py`.

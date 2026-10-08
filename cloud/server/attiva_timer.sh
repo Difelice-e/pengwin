@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Attiva le fotografie delle quote (ogni 2 ore) e la cattura della chiusura
+# (ogni 5 minuti). Da lanciare come root DOPO che la prova di connessione e'
+# riuscita e ~pengwin/.betfair/betfair.env contiene anche SUPABASE_KEY.
+#
+#     sudo bash ~pengwin/pengwin/cloud/server/attiva_timer.sh
+#
+# Nessuno dei due timer piazza ordini: leggono quote e aggiornano giocate gia'
+# fatte. Lo stato si controlla con:  systemctl list-timers 'pengwin-*'
+# e i log con:  journalctl -u pengwin-chiusura -n 50
+set -euo pipefail
+[[ $EUID -eq 0 ]] || { echo "Va lanciato come root" >&2; exit 1; }
+QUI=$(cd "$(dirname "$0")" && pwd)
+ENV=/home/pengwin/.betfair/betfair.env
+grep -q '^SUPABASE_KEY=sb_secret_' "$ENV" || {
+    echo "[!] in $ENV manca SUPABASE_KEY=sb_secret_...: i timer non potrebbero scrivere" >&2
+    exit 1
+}
+install -m 644 "$QUI"/systemd/pengwin-*.service "$QUI"/systemd/pengwin-*.timer /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now pengwin-fotografa.timer pengwin-chiusura.timer
+systemctl list-timers 'pengwin-*' --no-pager

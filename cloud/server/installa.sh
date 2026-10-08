@@ -91,10 +91,18 @@ BETFAIR_USERNAME=
 BETFAIR_PASSWORD=
 BETFAIR_CERT=$SEGRETI/client.crt
 BETFAIR_KEY=$SEGRETI/client.key
+# Supabase: la SECRET key (sb_secret_...). La publishable non puo' scrivere le
+# tabelle del braccio reale. Dashboard Supabase -> Settings -> API Keys.
+SUPABASE_URL=https://cshlvcfahevvdcdjlola.supabase.co
+SUPABASE_KEY=
 CONF
     echo "modello creato: $SEGRETI/betfair.env (da compilare)"
 else
     echo "$SEGRETI/betfair.env esiste gia': non lo tocco"
+    grep -q '^SUPABASE_KEY=' "$SEGRETI/betfair.env" || {
+        printf '\n# Supabase: SECRET key (sb_secret_...)\nSUPABASE_URL=https://cshlvcfahevvdcdjlola.supabase.co\nSUPABASE_KEY=\n' >> "$SEGRETI/betfair.env"
+        echo "aggiunte le righe SUPABASE_* a betfair.env (da compilare)"
+    }
 fi
 
 passo "5b/6 certificato per il login non interattivo"
