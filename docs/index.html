@@ -263,14 +263,17 @@ async function leggiTutto(tabella, parametri) {
 }
 
 async function raccogli() {
-  const [giocate, prereg, log] = await Promise.all([
+  const [giocate, prereg, log, btts] = await Promise.all([
     leggiTutto("giocate", { select: "*", order: "data_partita.asc" }),
     leggiTutto("preregistrazioni", { select: "chiave,valore" }),
     // Esclusi i job del braccio reale (fotografie delle quote ogni 2 ore,
     // chiusure): riempirebbero il riquadro e nasconderebbero gli ingest.
     leggi("log_esecuzioni", { select: "eseguito_il,job,esito,righe",
                               job: "not.like.reale_*",
-                              order: "eseguito_il.desc", limit: 6 })
+                              order: "eseguito_il.desc", limit: 6 }),
+    // Braccio su carta Goal/No Goal: tabella separata. Se non esiste ancora o
+    // non risponde, la pagina resta quella di prima (null = sezione assente).
+    leggiTutto("carta_btts", { select: "*", order: "inizio.asc" }).catch(() => null)
   ]);
 
   // freschezza: una richiesta per campionato, solo l'ultima partita giocata
@@ -313,7 +316,7 @@ async function raccogli() {
     esposto: aperte.reduce((s, x) => s + Number(x.stake), 0),
     band: P.band_esperimento || null,
     meta: P.meta_esperimento || {},
-    log, fresh,
+    log, fresh, btts,
     aggiornato: new Date().toLocaleString("it-IT",
       { day: "2-digit", month: "2-digit", year: "numeric",
         hour: "2-digit", minute: "2-digit" })
@@ -509,6 +512,73 @@ function barraFiltri(d) {
 }
 
 /* -------------------------------------------------------------- pagina */
+/* ------------------------------------------- Goal/No Goal su carta */
+// Esperimento separato, iniziato il 9/10/2026: non entra in nessun numero
+// della pagina sopra (che e' l'esperimento 1X2 / Over-Under). Prezzi
+// betfair.it, bankroll virtuale 400 EUR, cinque campionati, nessun denaro.
+function sezioneBtts(righe) {
+  if (righe === null) return "";
+  const testa = `<section id="sez-btts">
+  <div class="shead"><h2>Goal/No Goal — esperimento su carta separato</h2>
+    <span class="stamp conta">${righe.length} registrate</span></div>
+  <p class="nota">Un secondo esperimento, iniziato il 9 ottobre 2026 e <strong>tenuto fuori da tutti
+  i numeri qui sopra</strong>. Il modello calcola la probabilità che segnino entrambe le squadre, ma
+  su questo mercato non è mai stato verificato. Qui lo si misura prima di rischiare denaro: stesse
+  regole di selezione, prezzi di betfair.it, cinque campionati, bankroll virtuale di 400 €. Il
+  criterio è il CLV; il P&amp;L è virtuale e solo informativo.</p>`;
+  if (!righe.length) {
+    return testa + `<div class="pannello"><p class="vuoto">nessuna giocata ancora registrata</p></div></section>`;
+  }
+  const chiuse = righe.filter(x => x.esito === "vinta" || x.esito === "persa");
+  const clvs = righe.filter(x => x.clv !== null && x.clv !== undefined).map(x => Number(x.clv));
+  const media = clvs.length ? clvs.reduce((a, b) => a + b, 0) / clvs.length : null;
+  const sd = clvs.length > 1
+    ? Math.sqrt(clvs.reduce((a, c) => a + (c - media) ** 2, 0) / (clvs.length - 1)) : null;
+  const se = sd !== null ? sd / Math.sqrt(clvs.length) : null;
+  const puntato = chiuse.reduce((a, x) => a + Number(x.stake), 0);
+  const pnl = chiuse.reduce((a, x) => a + Number(x.profitto_netto || 0), 0);
+  const nome = x => x.selezione === "gg" ? "Goal" : "NoGoal";
+  const riga = x => {
+    const clv = x.clv;
+    const cls = (clv === null || clv === undefined || Number(clv) === 0) ? "" : (Number(clv) > 0 ? "pos" : "neg");
+    const fin = (x.gol_casa === null || x.gol_casa === undefined) ? "—" : `${x.gol_casa}-${x.gol_trasferta}`;
+    const es = x.esito === "vinta" ? `<span class="esito v">vinta</span>`
+             : x.esito === "persa" ? `<span class="esito p">persa</span>` : "in corso";
+    const p = x.profitto_netto === null || x.profitto_netto === undefined ? null : Number(x.profitto_netto);
+    return `<tr>
+ <td class="d">${esc(x.data_partita.slice(8, 10))}/${esc(x.data_partita.slice(5, 7))}</td>
+ <td><span class="lega">${esc(x.lega)}</span></td>
+ <td class="m">${esc(x.casa)} <span class="v">–</span> ${esc(x.trasferta)}</td>
+ <td><span class="sel">${nome(x)}</span></td>
+ <td class="n">${num(x.prob_modello, 3)}</td>
+ <td class="n">${num(x.quota)}</td>
+ <td class="n">${x.quota_chiusura ? num(x.quota_chiusura) : "—"}</td>
+ <td class="n ${cls}">${clv !== null && clv !== undefined ? pct(clv) : "—"}</td>
+ <td class="n ris">${fin}</td><td>${es}</td>
+ <td class="n ${p > 0 ? "pos" : p < 0 ? "neg" : ""}">${p === null ? "—" : num(p, 2, true)}</td></tr>`;
+  };
+  const corpo = righe.slice().sort((a, b) => String(b.inizio).localeCompare(String(a.inizio)))
+                     .map(riga).join("");
+  return testa + `
+  <div class="metriche">
+    <div class="met primaria"><div class="k">CLV medio</div>
+      <div class="val ${media === null ? "" : media > 0 ? "pos" : "neg"}">${pct(media)}</div>
+      <div class="note">${clvs.length ? `± ${pct(se, 1, false)} (errore standard) su ${clvs.length}` : "nessuna chiusura ancora"} · giudizio a 150 e 200 giocate</div></div>
+    <div class="met"><div class="k">Concluse</div><div class="val">${chiuse.length}</div>
+      <div class="note">${righe.length - chiuse.length} in corso</div></div>
+    <div class="met"><div class="k">ROI virtuale</div>
+      <div class="val ${puntato && pnl > 0 ? "pos" : puntato ? "neg" : ""}">${puntato ? pct(pnl / puntato) : "—"}</div>
+      <div class="note">${num(pnl, 2, true)} € su ${num(puntato)} € puntati</div></div>
+  </div>
+  <div class="tabellone" style="margin-top:6px"><table>
+    <thead><tr><th>Data</th><th>Lega</th><th>Partita</th><th>Giocata</th><th class="n">p</th>
+      <th class="n">Presa</th><th class="n">Chiusura</th><th class="n">CLV</th><th class="n">Finita</th>
+      <th>Esito</th><th class="n">P&amp;L €</th></tr></thead>
+    <tbody>${corpo}</tbody>
+  </table></div>
+</section>`;
+}
+
 function costruisci(d) {
   const clvNeg = d.clv_medio !== null && d.clv_medio < 0;
   const perLega = scomponiChiuse(d.chiuse, x => LEGHE[x.lega] || x.lega);
@@ -695,6 +765,8 @@ function costruisci(d) {
       <tr class="nessuna" hidden><td colspan="11" class="vuoto">nessuna giocata conclusa con questi filtri</td></tr></tbody>
   </table></div>
 </section>
+
+${sezioneBtts(d.btts)}
 
 <section>
   <div class="shead"><h2>Stato dei dati</h2></div>
