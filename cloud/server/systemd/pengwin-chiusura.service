@@ -8,5 +8,9 @@ Type=oneshot
 User=pengwin
 WorkingDirectory=/home/pengwin/pengwin/cloud
 Environment=TZ=Europe/Rome
+# Live App Key per la chiusura delle giocate reali (il CLV e' il criterio del
+# braccio reale: prezzi in tempo reale). Se il file manca resta la Delayed di
+# betfair.env. Le fotografie (pengwin-fotografa) usano sempre la Delayed.
+EnvironmentFile=-/home/pengwin/.betfair/live.env
 ExecStart=/home/pengwin/venv/bin/python -m src.reale.quote --chiusura
 TimeoutStartSec=240

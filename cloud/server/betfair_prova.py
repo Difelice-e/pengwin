@@ -335,7 +335,9 @@ def prova_connessione(a) -> int:
     if esa:
         book = libri(s, [c["marketId"] for c in esa])
         ritardo = {b.get("isMarketDataDelayed") for b in book.values()}
-        print(f"prezzi in ritardo (chiave Delayed): {', '.join(str(x) for x in ritardo)}")
+        tipo = {frozenset({True}): "si' -> Delayed App Key",
+                frozenset({False}): "no -> Live App Key"}.get(frozenset(ritardo), "misto")
+        print(f"prezzi in ritardo: {tipo}")
         print(f"\n{'partita':42} {'inizio':16} {'1':>6} {'X':>6} {'2':>6}")
         for c in esa:
             b = book.get(c["marketId"]) or {}

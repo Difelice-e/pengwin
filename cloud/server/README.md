@@ -100,6 +100,26 @@ Richieste e risposte (mai le credenziali) in `~/.betfair/prove/*.jsonl`.
 - Dopo la prova d'ordine: richiedere la Live su developer.betfair.com → Exchange API
   → For My Personal Betting (servono test completati e conto verificato KYC). La
   Live non si può usare in sola lettura: va attivata quando si comincia a giocare.
+- **Live App Key attiva dal 9/10/2026** (richiesta 57884). Le due chiavi si usano così:
+
+  | Chiave | File | Usata da |
+  |---|---|---|
+  | **Live** | `~/.betfair/live.env` (600), riga `BETFAIR_APP_KEY=` | turno reale (`con_live.sh`), chiusura delle giocate reali (timer `pengwin-chiusura`) |
+  | **Delayed** | `~/.betfair/betfair.env`, come prima | fotografie delle quote, Goal/No Goal su carta |
+
+  Il motivo è la regola di Betfair: la Live non è ammessa in sola lettura, la Delayed
+  è la chiave prevista per lettura e simulazione. Le fotografie dei cinque campionati e
+  il braccio su carta sono proprio questo; la Live serve solo dove si gioca.
+
+  ```bash
+  nano ~/.betfair/live.env        # una riga: BETFAIR_APP_KEY=<la Live App Key>
+  chmod 600 ~/.betfair/live.env
+  bash ~/pengwin/cloud/server/con_live.sh server/betfair_prova.py connessione
+  ```
+
+  La prova deve dire `prezzi in ritardo: no -> Live App Key`. `betfair.env` non si tocca.
+  Poi `sudo bash ~pengwin/pengwin/cloud/server/attiva_timer.sh`, che reinstalla
+  `pengwin-chiusura` con la Live.
 - La scadenza del certificato la stampa `installa.sh`: annotarla.
 
 ## 7. Braccio reale — una volta, prima del primo turno
@@ -139,9 +159,13 @@ Sul server, come `pengwin`:
 
 ```bash
 cd ~/pengwin && git pull && cd cloud
-~/venv/bin/python -m src.reale.turno --consenti-dati-vecchi            # anteprima
-~/venv/bin/python -m src.reale.turno --invia --consenti-dati-vecchi    # gioca, chiede GIOCA
+bash server/con_live.sh -m src.reale.turno --consenti-dati-vecchi            # anteprima
+bash server/con_live.sh -m src.reale.turno --invia --consenti-dati-vecchi    # gioca, chiede GIOCA
 ```
+
+`con_live.sh` avvia lo stesso programma con la **Live App Key** di `~/.betfair/live.env`
+(prezzi in tempo reale, tutti i livelli). Se il file manca, ha permessi diversi da 600 o
+contiene la Delayed, si ferma senza fare niente.
 
 `--consenti-dati-vecchi` serve solo quando l'ultima giornata giocata è di oltre
 10 giorni fa per una **sosta** (come il 9/10). In un weekend normale non si mette:
@@ -159,7 +183,8 @@ LAPSE). I prezzi valgono 10 minuti: se si conferma dopo, rifiuta e si rilancia.
 | 3 | posizione geografica rifiutata da Betfair |
 | 4 | inviato con giocate **respinte o incerte**: guardare `giocate_reali` e betfair.it |
 
-Subito dopo, il **Goal/No Goal su carta** (nessun denaro, cinque campionati):
+Subito dopo, il **Goal/No Goal su carta** (nessun denaro, cinque campionati), con la
+Delayed come sempre, cioè senza `con_live.sh`:
 
 ```bash
 ~/venv/bin/python -m src.reale.carta_btts --consenti-dati-vecchi              # anteprima
@@ -170,7 +195,7 @@ Regole in `preregistrazioni.carta_btts` (`sql/carta_btts.sql`, da lanciare una v
 Supabase). Chiusure e contabilizzazione le fanno i timer; i risultati compaiono in una
 sezione separata della dashboard.
 
-Se si interrompe a metà: `--invia --riprendi` invia solo le giocate rimaste
+Se si interrompe a metà: `bash server/con_live.sh -m src.reale.turno --invia --riprendi` invia solo le giocate rimaste
 `da_piazzare` o `incerta`, dopo aver chiesto a Betfair quali ordini esistono già.
 Non manda mai due volte lo stesso ordine.
 

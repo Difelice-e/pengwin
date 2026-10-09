@@ -1,5 +1,5 @@
 [Unit]
-Description=Pengwin - fotografia delle quote betfair.it (solo lettura)
+Description=Pengwin - fotografia delle quote betfair.it (solo lettura, Delayed App Key)
 After=network-online.target
 Wants=network-online.target
 
