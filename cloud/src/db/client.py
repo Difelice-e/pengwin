@@ -74,8 +74,12 @@ class Supabase:
                 continue
             if r.status_code < 400:
                 return r
-            # 5xx / 429 -> riprova; 4xx -> errore immediato
-            if r.status_code in (429,) or r.status_code >= 500:
+            # 5xx / 429 -> riprova; 4xx -> errore immediato. Eccezione: 401
+            # PGRST303 «JWT issued at future» e' uno sfasamento di orologio
+            # fra i server di Supabase con le chiavi nuove (sb_secret_): dura
+            # un istante, e un secondo tentativo passa (10/10/2026, 18:10).
+            transitorio = r.status_code == 401 and "PGRST303" in r.text
+            if r.status_code in (429,) or r.status_code >= 500 or transitorio:
                 last = SupabaseError(f"HTTP {r.status_code}: {r.text[:300]}")
                 time.sleep(1.5 * (tentativo + 1))
                 continue
