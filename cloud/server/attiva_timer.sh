@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
-# Attiva le fotografie delle quote (ogni 2 ore), la cattura della chiusura
-# (ogni 5 minuti) e la contabilizzazione del Goal/No Goal su carta (ogni giorno). Da lanciare come root DOPO che la prova di connessione e'
-# riuscita e ~pengwin/.betfair/betfair.env contiene anche SUPABASE_KEY.
+# Attiva i timer del server: fotografie delle quote (ogni 2 ore), chiusura
+# (ogni 5 minuti), esiti delle giocate reali (ogni 30 minuti) e del Goal/No Goal
+# su carta (ogni giorno). Da lanciare come root DOPO che la prova di connessione
+# e' riuscita e ~pengwin/.betfair/betfair.env contiene anche SUPABASE_KEY.
 #
 #     ssh root@<ip>      (l'utente pengwin non ha password ne' sudo)
 #     bash /home/pengwin/pengwin/cloud/server/attiva_timer.sh
 #
-# Nessun timer piazza ordini: leggono quote e aggiornano giocate gia'
-# fatte. Lo stato si controlla con:  systemctl list-timers 'pengwin-*'
+# Nessun timer piazza ordini: leggono quote, saldo ed esiti e aggiornano
+# giocate gia' fatte. Lo stato si controlla con:  systemctl list-timers 'pengwin-*'
 # e i log con:  journalctl -u pengwin-chiusura -n 50
 set -euo pipefail
 [[ $EUID -eq 0 ]] || { echo "Va lanciato come root" >&2; exit 1; }

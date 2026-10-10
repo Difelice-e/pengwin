@@ -1,0 +1,14 @@
+[Unit]
+Description=Pengwin - esiti delle giocate reali da Betfair (listClearedOrders) e saldo
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=pengwin
+WorkingDirectory=/home/pengwin/pengwin/cloud
+Environment=TZ=Europe/Rome
+# Live App Key: e' il conto su cui si gioca. Se il file manca resta la Delayed.
+EnvironmentFile=-/home/pengwin/.betfair/live.env
+ExecStart=/home/pengwin/venv/bin/python -m src.reale.contabilizza
+TimeoutStartSec=240

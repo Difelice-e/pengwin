@@ -1,0 +1,9 @@
+[Unit]
+Description=Pengwin - contabilizzazione reale ogni 30 minuti (nessun login se non c'e' niente da regolare)
+
+[Timer]
+OnCalendar=*-*-* *:10,40:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
