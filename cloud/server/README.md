@@ -118,7 +118,8 @@ Richieste e risposte (mai le credenziali) in `~/.betfair/prove/*.jsonl`.
   ```
 
   La prova deve dire `prezzi in ritardo: no -> Live App Key`. `betfair.env` non si tocca.
-  Poi `sudo bash ~pengwin/pengwin/cloud/server/attiva_timer.sh`, che reinstalla
+  Poi, da root (`ssh root@217.61.57.19`: l'utente `pengwin` non ha password né sudo),
+  `bash /home/pengwin/pengwin/cloud/server/attiva_timer.sh`, che reinstalla
   `pengwin-chiusura` con la Live.
 - La scadenza del certificato la stampa `installa.sh`: annotarla.
 
@@ -134,7 +135,7 @@ Richieste e risposte (mai le credenziali) in `~/.betfair/prove/*.jsonl`.
 4. Timer (fotografie ogni 2 ore, chiusure ogni 5 minuti, contabilizzazione del Goal/No Goal
    ogni giorno alle 16:15 — nessuno gioca). Va rilanciato dopo ogni `git pull` che aggiunge
    un timer:
-   `sudo bash ~pengwin/pengwin/cloud/server/attiva_timer.sh`
+   da root (`ssh root@217.61.57.19`): `bash /home/pengwin/pengwin/cloud/server/attiva_timer.sh`
 
 ## 8. Il turno
 

@@ -3,7 +3,8 @@
 # (ogni 5 minuti) e la contabilizzazione del Goal/No Goal su carta (ogni giorno). Da lanciare come root DOPO che la prova di connessione e'
 # riuscita e ~pengwin/.betfair/betfair.env contiene anche SUPABASE_KEY.
 #
-#     sudo bash ~pengwin/pengwin/cloud/server/attiva_timer.sh
+#     ssh root@<ip>      (l'utente pengwin non ha password ne' sudo)
+#     bash /home/pengwin/pengwin/cloud/server/attiva_timer.sh
 #
 # Nessun timer piazza ordini: leggono quote e aggiornano giocate gia'
 # fatte. Lo stato si controlla con:  systemctl list-timers 'pengwin-*'
