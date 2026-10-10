@@ -202,7 +202,7 @@ Non manda mai due volte lo stesso ordine.
 
 Log di ogni ordine: tabella `ordini_log` e copia locale in `~/.betfair/ordini/`.
 
-Test senza rete, dalla cartella `cloud/`: `python tests/betfair_prova.py`, `python tests/reale.py`, `python tests/carta_btts.py`, `python tests/contabilizza.py`.
+Test senza rete, dalla cartella `cloud/`: `python tests/betfair_prova.py`, `python tests/reale.py`, `python tests/carta_btts.py`, `python tests/contabilizza.py`, `python tests/automatico.py`.
 
 ## 9. Esiti e dashboard privata
 
@@ -226,3 +226,32 @@ con email e password di un account Supabase Auth autorizzato:
 3. SQL Editor: `insert into accesso_reale (uid) select id from auth.users on conflict do nothing;`
    e controllare con la `select` in fondo al file che gli account siano quelli giusti.
 
+
+## 10. Turno automatico (dal 10/10/2026)
+
+Il timer **`pengwin-turno`** lancia `src.reale.automatico` il **venerdì alle 19:00** (turno del
+weekend, partite fino a lunedì 23:59) e il **martedì alle 14:00** (infrasettimanale, partite fino
+a giovedì 23:59). Senza conferma a mano:
+
+1. turno reale con la Live (`turno --auto`). Gioca solo se l'**interruttore** è acceso dalla
+   pagina privata (`config_reale.attivo`) e se il **controllo strutturale** dei dati passa
+   (`src/report/freschezza.py`: nessuna partita già giocata senza risultato, ingest riusciti nelle
+   ultime 30 ore). Regole, tetti e pre-registrazione restano quelli del turno a mano; in più serve
+   la pre-registrazione `braccio_reale_automatico` (`sql/automatico.sql`);
+2. Goal/No Goal su carta (`carta_btts --auto`), con la Delayed;
+3. esito di entrambi in `log_esecuzioni` (`reale_turno`, `carta_btts_turno`).
+
+Le email (riepilogo del turno e riepilogo del mattino) e il giudizio sulle notizie li fanno due
+attività programmate di Claude, che leggono il database: il server non manda posta.
+
+Prova senza giocare né scrivere:
+
+```bash
+bash server/con_live.sh -m src.reale.automatico --prova
+```
+
+`attiva_timer.sh` imposta anche il **riavvio automatico alle 05:00** dopo gli aggiornamenti di
+sicurezza (`/etc/apt/apt.conf.d/52pengwin-riavvio`).
+
+Il turno a mano (`--invia`, sezione 8) resta disponibile: se lo si lancia prima del timer, il
+turno automatico trova il turno già giocato e non fa niente.

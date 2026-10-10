@@ -1,0 +1,12 @@
+[Unit]
+Description=Pengwin - turno automatico: venerdi' 19:00 (weekend) e martedi' 14:00 (infrasettimanale)
+
+[Timer]
+OnCalendar=Fri *-*-* 19:00:00 Europe/Rome
+OnCalendar=Tue *-*-* 14:00:00 Europe/Rome
+# Un turno saltato (server spento) non si recupera piu' tardi: pre-registrazione
+# braccio_reale_automatico, voce turno_saltato.
+Persistent=false
+
+[Install]
+WantedBy=timers.target

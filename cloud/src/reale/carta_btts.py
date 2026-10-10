@@ -4,6 +4,11 @@ Braccio SU CARTA Goal/No Goal (BTTS) ai prezzi di betfair.it. Nessun denaro.
     python -m src.reale.carta_btts                      # anteprima, non scrive
     python -m src.reale.carta_btts --registra           # registra le giocate su carta del turno
     python -m src.reale.carta_btts --contabilizza       # esiti delle partite concluse (timer)
+    python -m src.reale.carta_btts --auto               # registra, dal turno automatico
+
+Con --auto i dati vecchi si giudicano con il controllo strutturale
+(src/report/freschezza.py) e la finestra e' quella del turno (fine_finestra),
+come per il turno reale automatico.
 
 Si lancia subito dopo il turno reale, con lo stesso --consenti-dati-vecchi
 quando serve. Regole in `preregistrazioni.carta_btts`: le stesse del braccio
@@ -173,7 +178,11 @@ def main(argv=None) -> int:
     ap.add_argument("--contabilizza", action="store_true", help="esiti delle partite concluse")
     ap.add_argument("--consenti-dati-vecchi", action="store_true", dest="consenti_dati_vecchi")
     ap.add_argument("--giorni", type=float, default=4)
+    ap.add_argument("--auto", action="store_true",
+                    help="registra con controllo strutturale e finestra del turno")
     a = ap.parse_args(argv)
+    if a.auto:
+        a.registra = True
 
     api.carica_env()
     db = client()
@@ -181,7 +190,9 @@ def main(argv=None) -> int:
         return contabilizza(db)
 
     # import qui: il modello serve solo per la selezione, non per contabilizzare
-    from src.reale.turno import dati_vecchi, probabilita_dal_modello, turno_corrente
+    from src.reale.turno import (dati_vecchi, fine_finestra, probabilita_dal_modello,
+                                 turno_corrente)
+    from src.report import freschezza
     from src.report.dataset import carica
     from src.report.predict import MAX_ETA, VERSIONE, build_models
 
@@ -198,17 +209,27 @@ def main(argv=None) -> int:
         return 2
 
     oggi = pd.Timestamp(ora.date())
-    models = {k: v for k, v in build_models(carica(db), oggi).items() if k in LEGHE}
+    frame = carica(db)
+    models = {k: v for k, v in build_models(frame, oggi).items() if k in LEGHE}
     vecchi = dati_vecchi(models, oggi)
     for k, ultima, eta in vecchi:
         print(f"  modello {k}: ultima partita {ultima} ({eta} giorni fa)  <-- DATI VECCHI")
+    if a.auto:
+        motivi = freschezza.controlla(db, frame, LEGHE)
+        if motivi:
+            print("[!] RIFIUTATO: dati non aggiornati:")
+            for m in motivi:
+                print(f"      {m}")
+            return 2
+        vecchi = []
     if a.registra and vecchi and not a.consenti_dati_vecchi:
         print(f"[!] RIFIUTATO: dati fermi da oltre {MAX_ETA} giorni. "
               "Se e' una sosta: --consenti-dati-vecchi")
         return 2
 
     adesso = datetime.now(timezone.utc)
-    cat = api.catalogo(s, MARGINE_INIZIO, timedelta(days=a.giorni),
+    fino = (fine_finestra(ora) - ora) if a.auto else timedelta(days=a.giorni)
+    cat = api.catalogo(s, MARGINE_INIZIO, fino,
                        tipi=("BOTH_TEAMS_TO_SCORE",), leghe=LEGHE)
     book = api.libri(s, sorted({c["marketId"] for c in cat}))
     cand, scartate = candidati_btts(cat, book, probabilita_dal_modello(models), adesso)

@@ -6,6 +6,18 @@ piazza gli ordini con soldi veri. Gira sul server italiano.
     python -m src.reale.turno --saldo-simulato 400  # anteprima con un saldo ipotetico
     python -m src.reale.turno --invia               # scrive le giocate e piazza, dopo conferma
     python -m src.reale.turno --invia --riprendi    # completa un invio interrotto
+    python -m src.reale.turno --auto                # turno automatico (timer): niente GIOCA
+
+Con --auto (dal 10/10/2026, pre-registrazione `braccio_reale_automatico`):
+  - gioca solo se l'interruttore `config_reale.attivo` e' acceso;
+  - i dati vecchi si giudicano con il controllo strutturale
+    (src/report/freschezza.py), non con i giorni dall'ultima partita, e non
+    c'e' modo di scavalcarlo;
+  - la finestra di partite e' quella del turno: da adesso a lunedi' 23:59 per
+    il turno del weekend (venerdi'-domenica), a giovedi' 23:59 per quello
+    infrasettimanale (lunedi'-giovedi');
+  - tutto il resto (pre-registrazione, turno gia' giocato, controlli fissi,
+    validita' dei prezzi, ordine delle scritture) e' identico a --invia.
 
 Ordine delle operazioni con --invia, e perche':
   1. rifiuta se manca la pre-registrazione `braccio_reale`, se il turno ha gia'
@@ -25,7 +37,7 @@ copia locale (~/.betfair/ordini/), che regge anche se Supabase non risponde.
 
 Codici di uscita: 0 ok, 1 errore, 2 rifiuto per regola o sicurezza,
 3 posizione geografica vietata, 4 invio completato con giocate respinte o
-incerte (vanno guardate).
+incerte (vanno guardate), 5 interruttore spento (solo --auto).
 """
 from __future__ import annotations
 
@@ -48,12 +60,42 @@ from src.reale import api                                          # noqa: E402
 from src.reale.selezione import (CAMPIONATI, MARGINE_INIZIO,      # noqa: E402
                                  MIN_PARTITE_SQUADRA, candidati, controlla,
                                  seleziona, togli_gia_giocate)
+from src.report import freschezza                                 # noqa: E402
 from src.report.dataset import carica                              # noqa: E402
 from src.report.predict import MAX_ETA, VERSIONE, build_models      # noqa: E402
 
 FUSO = ZoneInfo("Europe/Rome")
 VALIDITA_PREZZI = timedelta(minutes=10)
 PREREGISTRAZIONE = "braccio_reale"
+
+
+def fine_finestra(ora: datetime) -> datetime:
+    """Ultimo istante delle partite del turno che contiene `ora` (ora italiana).
+
+    Weekend (venerdi'-domenica): fino a lunedi' 23:59. Infrasettimanale
+    (lunedi'-giovedi'): fino a giovedi' 23:59. Cosi' i due turni non si
+    sovrappongono mai, e un turno del venerdi' non gioca martedi'.
+    """
+    ora = ora.astimezone(FUSO)
+    giorno = ora.isoweekday()                     # 1 lunedi' ... 7 domenica
+    avanti = (4 - giorno) if giorno <= 4 else (8 - giorno)
+    fine = (ora + timedelta(days=avanti)).replace(hour=23, minute=59, second=0, microsecond=0)
+    return fine
+
+
+def interruttore(db) -> tuple[bool, str]:
+    """(acceso, motivo). Tabella assente o riga mancante = spento."""
+    try:
+        r = db.select("config_reale", colonne="attivo,modificato_il,modificato_da",
+                      filtri={"id": "eq.1"})
+    except Exception as e:                                   # noqa: BLE001
+        return False, f"interruttore non leggibile ({str(e)[:80]}): sql/automatico.sql lanciato?"
+    if not r:
+        return False, "interruttore non configurato (config_reale vuota)"
+    if not r[0]["attivo"]:
+        da = r[0].get("modificato_da") or "?"
+        return False, f"interruttore spento ({da}, {str(r[0].get('modificato_il'))[:16]})"
+    return True, "acceso"
 
 
 def turno_corrente(ora: datetime) -> str:
@@ -261,7 +303,14 @@ def main(argv=None) -> int:
                     help=f"accetta campionati fermi da oltre {MAX_ETA} giorni (es. dopo una sosta)")
     ap.add_argument("--giorni", type=float, default=4,
                     help="finestra di partite, in giorni da adesso (default 4)")
+    ap.add_argument("--auto", action="store_true",
+                    help="turno automatico: senza conferma, interruttore, controllo strutturale")
     a = ap.parse_args(argv)
+    if a.auto:
+        if a.riprendi or a.saldo_simulato is not None or a.consenti_dati_vecchi:
+            print("--auto non si combina con --riprendi, --saldo-simulato o --consenti-dati-vecchi")
+            return 2
+        a.invia = True
 
     if a.invia and a.saldo_simulato is not None:
         print("--saldo-simulato vale solo per l'anteprima")
@@ -275,6 +324,11 @@ def main(argv=None) -> int:
               "SUPABASE_KEY (~/.betfair/betfair.env), non la publishable.")
         return 2
     db = client()
+    if a.auto:
+        acceso, motivo = interruttore(db)
+        if not acceso:
+            print(f"[!] FERMO: {motivo}. Nessuna giocata.")
+            return 5
     try:
         s = api.sessione()
     except LocazioneVietata:
@@ -334,12 +388,23 @@ def main(argv=None) -> int:
 
     # --- modello
     oggi = pd.Timestamp(ora.date())
-    models = {k: v for k, v in build_models(carica(db), oggi).items() if k in CAMPIONATI}
+    frame = carica(db)
+    models = {k: v for k, v in build_models(frame, oggi).items() if k in CAMPIONATI}
     for k, v in sorted(models.items()):
         eta = (oggi - v[4]).days
         print(f"  modello {k:<4} {v[2]:>4} partite, ultima {v[4].date()} ({eta} giorni fa)"
               + ("  <-- DATI VECCHI" if eta > MAX_ETA else ""))
     vecchi = dati_vecchi(models, oggi)
+    if a.auto:
+        # controllo strutturale al posto dei giorni: la sosta non e' un buco
+        motivi = freschezza.controlla(db, frame, CAMPIONATI)
+        if motivi:
+            print("\n[!] RIFIUTATO: dati non aggiornati:")
+            for m in motivi:
+                print(f"      {m}")
+            return 2
+        print("  dati: controllo strutturale superato (nessuna partita giocata mancante)")
+        vecchi = []
     if a.invia and vecchi and not a.consenti_dati_vecchi:
         print(f"\n[!] RIFIUTATO: {len(vecchi)} campionati fermi da oltre {MAX_ETA} giorni. "
               "Se e' una sosta e non un buco nei dati: --consenti-dati-vecchi")
@@ -347,7 +412,10 @@ def main(argv=None) -> int:
 
     # --- prezzi
     letti_il = datetime.now(timezone.utc)
-    cat = api.catalogo(s, MARGINE_INIZIO, timedelta(days=a.giorni), leghe=CAMPIONATI)
+    fino = (fine_finestra(ora) - ora) if a.auto else timedelta(days=a.giorni)
+    if a.auto:
+        print(f"  finestra del turno: fino a {fine_finestra(ora):%a %d/%m %H:%M}")
+    cat = api.catalogo(s, MARGINE_INIZIO, fino, leghe=CAMPIONATI)
     book = api.libri(s, sorted({c["marketId"] for c in cat}))
     cand, scartate = candidati(cat, book, probabilita_dal_modello(models), letti_il)
     try:
@@ -396,16 +464,23 @@ def main(argv=None) -> int:
         print(f"\n[!] RIFIUTATO: manca la pre-registrazione '{PREREGISTRAZIONE}' "
               "(sql/braccio_reale.sql). Nessun ordine.")
         return 2
-    if not sys.stdin.isatty():
-        print("\n[!] RIFIUTATO: l'invio richiede la conferma da terminale")
-        return 2
-
     totale = sum(x["stake"] for x in scelte)
-    risposta = input(f"\nScrivi GIOCA per inviare {len(scelte)} ordini, "
-                     f"totale {totale:.2f} EUR: ").strip()
-    if risposta != "GIOCA":
-        print("non confermato: nessun ordine inviato")
-        return 2
+    if a.auto:
+        if not db.select("preregistrazioni", colonne="chiave",
+                         filtri={"chiave": "eq.braccio_reale_automatico"}):
+            print("\n[!] RIFIUTATO: manca la pre-registrazione 'braccio_reale_automatico' "
+                  "(sql/automatico.sql). Nessun ordine.")
+            return 2
+        print(f"\nturno automatico: invio {len(scelte)} ordini, totale {totale:.2f} EUR")
+    else:
+        if not sys.stdin.isatty():
+            print("\n[!] RIFIUTATO: l'invio richiede la conferma da terminale")
+            return 2
+        risposta = input(f"\nScrivi GIOCA per inviare {len(scelte)} ordini, "
+                         f"totale {totale:.2f} EUR: ").strip()
+        if risposta != "GIOCA":
+            print("non confermato: nessun ordine inviato")
+            return 2
     if datetime.now(timezone.utc) - letti_il > VALIDITA_PREZZI:
         print("[!] RIFIUTATO: prezzi letti da oltre 10 minuti. Rilanciare.")
         return 2
