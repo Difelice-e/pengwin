@@ -1,0 +1,590 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Pengwin — Conto reale</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+:root{
+  --ground:#F3F5F9; --surface:#FFFFFF; --raise:#FAFBFD;
+  --ink:#171A21; --muted:#59616F; --faint:#8B93A2; --line:#DCE1EA;
+  --accent:#3A4C8C; --accent-soft:#E7EAF6;
+  --pos:#17705F; --neg:#A2413A; --warn:#8E6415;
+}
+@media (prefers-color-scheme:dark){ :root:not([data-theme="light"]){
+  --ground:#0F1219; --surface:#171B24; --raise:#1D222D;
+  --ink:#E7EAF1; --muted:#8F98A8; --faint:#6C7484; --line:#242A35;
+  --accent:#8A9BE0; --accent-soft:#1E2436;
+  --pos:#46B39C; --neg:#E28A80; --warn:#D2A24E;
+}}
+:root[data-theme="dark"]{
+  --ground:#0F1219; --surface:#171B24; --raise:#1D222D;
+  --ink:#E7EAF1; --muted:#8F98A8; --faint:#6C7484; --line:#242A35;
+  --accent:#8A9BE0; --accent-soft:#1E2436;
+  --pos:#46B39C; --neg:#E28A80; --warn:#D2A24E;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--ink);
+  font-family:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  font-size:15px;line-height:1.55;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1080px;margin:0 auto;padding:40px 22px 72px;
+  display:flex;flex-direction:column;gap:34px}
+h1,h2{font-family:Newsreader,Georgia,serif;font-weight:500;text-wrap:balance;margin:0}
+h1{font-size:33px;letter-spacing:-.01em;line-height:1.15}
+h2{font-size:21px;letter-spacing:-.005em}
+.eyebrow{font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:var(--faint);font-weight:600}
+.sub{color:var(--muted);margin:6px 0 0;max-width:66ch}
+header{border-bottom:1px solid var(--line);padding-bottom:26px}
+.head-row{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;flex-wrap:wrap}
+.stamp{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12px;color:var(--faint);
+  text-align:right;line-height:1.7}
+section{display:flex;flex-direction:column;gap:14px}
+.shead{display:flex;align-items:baseline;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.nota{color:var(--muted);font-size:13.5px;max-width:70ch;margin:0}
+.metriche{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:1px;
+  background:var(--line);border:1px solid var(--line);border-radius:2px;overflow:hidden}
+.met{background:var(--surface);padding:18px 20px}
+.met .k{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);font-weight:600}
+.met .val{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:27px;
+  font-variant-numeric:tabular-nums;margin-top:7px;letter-spacing:-.02em}
+.met .note{font-size:12.5px;color:var(--muted);margin-top:3px}
+.met.primaria{background:var(--raise)}
+.pos{color:var(--pos)} .neg{color:var(--neg)} .warn{color:var(--warn)}
+.pannello{background:var(--surface);border:1px solid var(--line);border-radius:2px;padding:20px 22px;
+  display:flex;flex-direction:column;gap:12px}
+.riga{display:flex;flex-wrap:wrap;align-items:baseline;gap:12px}
+.riga .k{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);
+  font-weight:600;min-width:190px}
+.riga .v{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:19px;
+  font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.vchip{display:inline-flex;align-items:center;font-size:11px;font-weight:600;
+  padding:2px 10px;border-radius:999px;letter-spacing:.02em}
+.vchip.no{color:var(--neg);background:color-mix(in srgb,var(--neg) 14%,transparent)}
+.vchip.forse{color:var(--warn);background:color-mix(in srgb,var(--warn) 16%,transparent)}
+.vchip.si{color:var(--pos);background:color-mix(in srgb,var(--pos) 14%,transparent)}
+.barra{position:relative;height:8px;border-radius:4px;background:var(--raise);
+  border:1px solid var(--line);overflow:visible}
+.barra i{display:block;height:100%;background:var(--accent);border-radius:4px}
+.barra b{position:absolute;top:-4px;bottom:-4px;width:2px;background:var(--faint)}
+.scala{display:flex;justify-content:space-between;font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:11px;color:var(--faint)}
+.tabellone{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:2px}
+table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:700px}
+th{text-align:left;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--faint);font-weight:600;padding:12px 12px 9px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:baseline}
+tr:last-child td{border-bottom:none}
+td.n,th.n{text-align:right;font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-variant-numeric:tabular-nums;white-space:nowrap}
+td.d{font-family:"IBM Plex Mono",ui-monospace,monospace;color:var(--muted);white-space:nowrap}
+td.m{min-width:200px}
+.v{color:var(--faint)}
+.lega{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:11px;color:var(--muted);
+  background:var(--raise);border:1px solid var(--line);padding:1px 6px;border-radius:2px}
+.sel{font-size:12.5px;color:var(--muted);white-space:nowrap}
+.esito{font-size:11px;letter-spacing:.06em;text-transform:uppercase;font-weight:600;
+  padding:2px 8px;border-radius:2px;border:1px solid;white-space:nowrap}
+.esito.v{color:var(--pos);border-color:var(--pos)}
+.esito.p{color:var(--neg);border-color:var(--neg)}
+.esito.n{color:var(--muted);border-color:var(--line)}
+.esito.w{color:var(--warn);border-color:var(--warn)}
+.piccolo{font-size:11.5px;color:var(--faint)}
+.vuoto{color:var(--faint);font-style:italic;margin:0}
+.stato{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px}
+.box{background:var(--surface);border:1px solid var(--line);border-radius:2px;padding:13px 15px}
+.box .l{font-size:12px;color:var(--muted)}
+.box .d{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:15px;margin-top:3px}
+.box.vecchio{border-color:var(--warn)} .box.vecchio .d{color:var(--warn)}
+.box.errore{border-color:var(--neg)} .box.errore .d{color:var(--neg)}
+footer{border-top:1px solid var(--line);padding-top:20px;color:var(--faint);font-size:12.5px}
+footer p{margin:0 0 6px;max-width:74ch}
+code{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12px;
+  background:var(--raise);border:1px solid var(--line);padding:1px 5px;border-radius:2px}
+.link{font:inherit;font-size:12.5px;background:none;border:none;padding:0;cursor:pointer;
+  color:var(--accent);text-decoration:underline;text-underline-offset:2px}
+
+/* accesso */
+#accesso,#caricamento,#messaggio{max-width:420px;margin:0 auto;padding:72px 22px}
+#accesso,#messaggio,#pagina{display:none}
+#accesso form{background:var(--surface);border:1px solid var(--line);border-radius:2px;
+  padding:24px;display:flex;flex-direction:column;gap:14px;margin-top:18px}
+label{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);font-weight:600;
+  display:flex;flex-direction:column;gap:6px}
+input{font:inherit;font-size:15px;color:var(--ink);background:var(--raise);border:1px solid var(--line);
+  border-radius:2px;padding:9px 11px;text-transform:none;letter-spacing:0}
+input:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent)}
+button.primario{font:inherit;font-weight:600;font-size:14px;color:#fff;background:var(--accent);
+  border:none;border-radius:2px;padding:10px 14px;cursor:pointer}
+button.primario:disabled{opacity:.6;cursor:default}
+.err{color:var(--neg);font-size:13.5px;margin:0;min-height:1.2em}
+#messaggio h2{margin-bottom:10px}
+#messaggio p{color:var(--muted)}
+.puls{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--accent);
+  margin-right:9px;animation:puls 1.1s ease-in-out infinite}
+@keyframes puls{0%,100%{opacity:.25}50%{opacity:1}}
+@media (prefers-reduced-motion:reduce){.puls{animation:none;opacity:.6}}
+@media (max-width:640px){ h1{font-size:26px} .wrap{padding:26px 15px 52px;gap:26px}
+  .riga .k{min-width:0;width:100%} }
+</style>
+</head>
+<body>
+
+<div id="caricamento"><span class="puls"></span>accesso…</div>
+
+<div id="accesso">
+  <div class="eyebrow">Pengwin · pagina privata</div>
+  <h1>Conto reale</h1>
+  <p class="sub">Giocate con soldi veri su betfair.it. Si apre solo con uno degli account
+  autorizzati.</p>
+  <form id="modulo" autocomplete="on">
+    <label>Email <input type="email" id="email" autocomplete="username" required></label>
+    <label>Password <input type="password" id="password" autocomplete="current-password" required></label>
+    <button type="submit" class="primario" id="entra">Entra</button>
+    <p class="err" id="errore-accesso" role="alert"></p>
+  </form>
+</div>
+
+<div id="messaggio"><h2 id="msg-titolo"></h2><p id="msg-testo"></p>
+  <p><button class="link" id="msg-esci">esci</button></p></div>
+
+<div id="pagina" class="wrap"></div>
+
+<script>
+const URL_DB = "https://cshlvcfahevvdcdjlola.supabase.co";
+// chiave pubblica: da sola non legge niente di questa pagina. I dati arrivano
+// solo con il token di un account presente in accesso_reale (policy RLS).
+const CHIAVE = "sb_publishable_KPLnF6VmHPgBC7uEOA7GyA_AUUffl5D";
+const MEMORIA = "pengwin-reale-refresh";
+
+const LEGHE = {E0: "Premier League", I1: "Serie A"};
+const SEL = {"1X2|1": "1", "1X2|X": "X", "1X2|2": "2", "OU25|over": "Over 2.5", "OU25|under": "Under 2.5"};
+const APERTE = ["piazzata", "parziale", "abbinata"];
+
+/* ---------------------------------------------------------- utilita' */
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g,
+  c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
+const vuoto = v => v === null || v === undefined || v === "";
+function num(v, dec = 2, segno = false) {
+  if (vuoto(v)) return "—";
+  const n = Number(v);
+  if (!isFinite(n)) return "—";
+  return (segno && n >= 0 ? "+" : "") + n.toFixed(dec).replace(".", ",");
+}
+function pct(v, dec = 1, segno = true) {
+  if (vuoto(v)) return "—";
+  const n = Number(v) * 100;
+  if (!isFinite(n)) return "—";
+  return (segno && n >= 0 ? "+" : "") + n.toFixed(dec).replace(".", ",") + "%";
+}
+const cls = v => vuoto(v) || Number(v) === 0 ? "" : (Number(v) > 0 ? "pos" : "neg");
+const somma = (a, f) => a.reduce((s, x) => s + (Number(f(x)) || 0), 0);
+const tipo = x => SEL[x.mercato + "|" + x.selezione] || x.selezione;
+const FUSO = {timeZone: "Europe/Rome"};
+function quando(iso, conAnno = false) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  return d.toLocaleString("it-IT", Object.assign({day: "2-digit", month: "2-digit",
+    hour: "2-digit", minute: "2-digit"}, conAnno ? {year: "numeric"} : {}, FUSO));
+}
+function fa(iso) {
+  const m = Math.round((Date.now() - new Date(iso)) / 60000);
+  if (m < 1) return "adesso";
+  if (m < 60) return m + " min fa";
+  const h = Math.round(m / 60);
+  return h < 36 ? h + " ore fa" : Math.round(h / 24) + " giorni fa";
+}
+function memoria(op, v) {
+  try {
+    if (op === "leggi") return localStorage.getItem(MEMORIA);
+    if (op === "scrivi") localStorage.setItem(MEMORIA, v);
+    if (op === "cancella") localStorage.removeItem(MEMORIA);
+  } catch (e) { /* navigazione privata: si rientra con la password */ }
+  return null;
+}
+
+/* ------------------------------------------------------------ accesso */
+let sessione = null;
+
+async function autentica(grant, corpo) {
+  const r = await fetch(`${URL_DB}/auth/v1/token?grant_type=${grant}`, {
+    method: "POST", headers: {apikey: CHIAVE, "Content-Type": "application/json"},
+    body: JSON.stringify(corpo)});
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    const m = j.error_description || j.msg || j.message || j.error || ("HTTP " + r.status);
+    throw new Error(/invalid login credentials/i.test(m) ? "Email o password sbagliate." : m);
+  }
+  sessione = {token: j.access_token, refresh: j.refresh_token,
+              scade: Date.now() + (j.expires_in || 3600) * 1000,
+              email: (j.user && j.user.email) || ""};
+  memoria("scrivi", j.refresh_token);
+  return sessione;
+}
+
+async function token() {
+  if (sessione && Date.now() < sessione.scade - 60000) return sessione.token;
+  if (sessione && sessione.refresh) { await autentica("refresh_token", {refresh_token: sessione.refresh}); return sessione.token; }
+  throw new Error("sessione scaduta");
+}
+
+async function esci() {
+  try {
+    if (sessione) await fetch(`${URL_DB}/auth/v1/logout`, {method: "POST",
+      headers: {apikey: CHIAVE, Authorization: "Bearer " + sessione.token}});
+  } catch (e) { /* si esce comunque */ }
+  sessione = null;
+  memoria("cancella");
+  mostra("accesso");
+}
+
+class Mancante extends Error {}
+
+async function leggi(tabella, parametri) {
+  const q = new URLSearchParams(parametri).toString();
+  const r = await fetch(`${URL_DB}/rest/v1/${tabella}?${q}`,
+    {headers: {apikey: CHIAVE, Authorization: "Bearer " + await token()}});
+  if (r.status === 404 || r.status === 400) {
+    const t = await r.text();
+    if (/PGRST205|42P01|does not exist|Could not find the table/i.test(t)) throw new Mancante(tabella);
+    throw new Error(`${tabella}: HTTP ${r.status} — ${t}`);
+  }
+  if (!r.ok) throw new Error(`${tabella}: HTTP ${r.status} — ${await r.text()}`);
+  return r.json();
+}
+
+function mostra(quale) {
+  ["caricamento", "accesso", "messaggio", "pagina"].forEach(id => {
+    $(id).style.display = id === quale ? (id === "pagina" ? "flex" : "block") : "none";
+  });
+}
+function avviso(titolo, testo) {
+  $("msg-titolo").textContent = titolo;
+  $("msg-testo").textContent = testo;
+  mostra("messaggio");
+}
+
+/* ------------------------------------------------------------ dati */
+async function raccogli() {
+  let acc;
+  try {
+    acc = await leggi("accesso_reale", {select: "uid"});
+  } catch (e) {
+    if (e instanceof Mancante) return {stato: "senza_permessi"};
+    throw e;
+  }
+  if (!acc.length) return {stato: "non_autorizzato"};
+  const [giocate, saldi, prereg, log] = await Promise.all([
+    leggi("giocate_reali", {select: "*", order: "inizio.asc"}),
+    leggi("saldi_reali", {select: "il,disponibile,esposizione,totale", order: "il.desc", limit: 1})
+      .catch(e => { if (e instanceof Mancante) return []; throw e; }),
+    leggi("preregistrazioni", {select: "valore", chiave: "eq.braccio_reale"}),
+    leggi("log_esecuzioni", {select: "eseguito_il,job,esito,righe,dettaglio",
+                             job: "like.reale_*", order: "eseguito_il.desc", limit: 60})
+  ]);
+  return {stato: "ok", giocate, saldo: saldi[0] || null,
+          pre: (prereg[0] && prereg[0].valore) || {}, log};
+}
+
+function calcola(d) {
+  const g = d.giocate;
+  const aperte = g.filter(x => !x.esito && APERTE.includes(x.stato));
+  const chiuse = g.filter(x => x.esito);
+  const decise = chiuse.filter(x => x.esito === "vinta" || x.esito === "persa");
+  const problemi = g.filter(x => !x.esito && !APERTE.includes(x.stato));
+  const clvs = g.filter(x => !vuoto(x.clv)).map(x => Number(x.clv));
+  const n = clvs.length;
+  const media = n ? clvs.reduce((a, b) => a + b, 0) / n : null;
+  const sd = n > 1 ? Math.sqrt(clvs.reduce((a, c) => a + (c - media) ** 2, 0) / (n - 1)) : null;
+  const se = sd !== null ? sd / Math.sqrt(n) : null;
+  const inviate = g.filter(x => x.bet_id);
+  const abbinate = inviate.filter(x => !vuoto(x.quota_abbinata) && Number(x.stake_abbinato) > 0);
+  const volume = somma(decise, x => vuoto(x.stake_abbinato) ? x.stake_richiesto : x.stake_abbinato);
+  const ultimoTurno = g.length ? g[g.length - 1] : null;
+  return {
+    aperte, chiuse, decise, problemi, n, media, se,
+    lo: se !== null ? media - 1.96 * se : null, hi: se !== null ? media + 1.96 * se : null,
+    richiesto: somma(inviate, x => x.stake_richiesto),
+    abbinato: somma(inviate, x => x.stake_abbinato),
+    scarto: abbinate.length ? abbinate.reduce((a, x) =>
+      a + (Number(x.quota_abbinata) / Number(x.quota_riferimento) - 1), 0) / abbinate.length : null,
+    nAbbinate: abbinate.length, nInviate: inviate.length,
+    netto: somma(chiuse, x => x.profitto_netto),
+    commissioni: somma(chiuse, x => x.commissione),
+    volume,
+    vinte: decise.filter(x => x.esito === "vinta").length,
+    esposto: somma(aperte, x => vuoto(x.stake_abbinato) ? x.stake_richiesto : x.stake_abbinato),
+    saldoTurno: ultimoTurno ? Number(ultimoTurno.saldo_al_turno) : null
+  };
+}
+
+/* ------------------------------------------------------------ pezzi */
+function verdetto(c, pre) {
+  const crit = pre.clv || {};
+  const [v1, v2] = crit.valutazioni_a_giocate || [150, 200];
+  if (c.n < v1) return ["no", "troppo presto",
+    `Servono ${v1} giocate con quota di chiusura per la prima valutazione pre-registrata: ne mancano ${v1 - c.n}. ` +
+    `Fino ad allora il CLV medio oscilla molto e non va letto come un verdetto, in nessuna delle due direzioni.`];
+  if (c.media >= 0.03 && c.lo > 0) return ["si", "si prosegue",
+    "CLV medio almeno +3% con l'intervallo al 95% tutto sopra zero: è il criterio pre-registrato per proseguire."];
+  if (c.n >= v2 && c.media <= 0) return ["no", "ci si ferma",
+    `A ${v2} giocate il CLV medio è zero o negativo: è il criterio pre-registrato per fermarsi.`];
+  return ["forse", "zona intermedia",
+    "Né il criterio per proseguire né quello per fermarsi: la pre-registrazione dice di continuare fino a 300 giocate e poi decidere."];
+}
+
+function rigaGiocata(x) {
+  const q = vuoto(x.quota_abbinata) ? num(x.quota_riferimento)
+    : num(x.quota_abbinata) + (Number(x.quota_abbinata) !== Number(x.quota_riferimento)
+        ? ` <span class="piccolo">(rif. ${num(x.quota_riferimento)})</span>` : "");
+  const st = vuoto(x.stake_abbinato) ? `<span class="piccolo">${num(x.stake_richiesto)} rich.</span>`
+    : num(x.stake_abbinato) + (Number(x.stake_abbinato) < Number(x.stake_richiesto) - 0.005
+        ? ` <span class="piccolo">su ${num(x.stake_richiesto)}</span>` : "");
+  let es;
+  if (x.esito === "vinta") es = `<span class="esito v">vinta</span>`;
+  else if (x.esito === "persa") es = `<span class="esito p">persa</span>`;
+  else if (x.esito === "void") es = `<span class="esito n">${x.stato === "non_abbinata" ? "non abbinata" : "void"}</span>`;
+  else if (APERTE.includes(x.stato)) es = new Date(x.inizio) < new Date()
+    ? `<span class="esito w">in campo</span>` : `<span class="piccolo">${esc(x.stato)}</span>`;
+  else es = `<span class="esito p">${esc(x.stato)}</span>`;
+  return `<tr>
+ <td class="d">${quando(x.inizio)}</td>
+ <td><span class="lega">${esc(x.lega)}</span></td>
+ <td class="m">${esc(x.casa)} <span class="v">–</span> ${esc(x.trasferta)}</td>
+ <td><span class="sel">${esc(tipo(x))}</span></td>
+ <td class="n">${pct(x.edge_netto)}</td>
+ <td class="n">${q}</td>
+ <td class="n">${st}</td>
+ <td class="n">${vuoto(x.quota_chiusura_it) ? "—" : num(x.quota_chiusura_it)}</td>
+ <td class="n ${cls(x.clv)}">${pct(x.clv)}</td>
+ <td>${es}</td>
+ <td class="n ${cls(x.profitto_netto)}">${vuoto(x.profitto_netto) ? "—" : num(x.profitto_netto, 2, true)}</td></tr>`;
+}
+
+function tabellaGiocate(righe, vuotoTesto) {
+  return `<div class="tabellone"><table>
+  <thead><tr><th>Via</th><th>Lega</th><th>Partita</th><th>Giocata</th><th class="n">Edge</th>
+    <th class="n">Quota</th><th class="n">€</th><th class="n">Chiusura</th><th class="n">CLV</th>
+    <th>Esito</th><th class="n">Netto €</th></tr></thead>
+  <tbody>${righe.map(rigaGiocata).join("") || `<tr><td colspan="11" class="vuoto">${vuotoTesto}</td></tr>`}</tbody>
+</table></div>`;
+}
+
+function perTurno(g) {
+  const m = new Map();
+  g.forEach(x => { if (!m.has(x.turno)) m.set(x.turno, []); m.get(x.turno).push(x); });
+  return [...m.entries()].sort((a, b) => b[0].localeCompare(a[0])).map(([t, l]) => {
+    const ch = l.filter(x => x.esito);
+    const cl = l.filter(x => !vuoto(x.clv)).map(x => Number(x.clv));
+    return `<tr><td class="d">${esc(t)}</td><td class="n">${l.length}</td>
+      <td class="n">${num(l[0].saldo_al_turno)}</td>
+      <td class="n">${num(somma(l, x => vuoto(x.stake_abbinato) ? x.stake_richiesto : x.stake_abbinato))}</td>
+      <td class="n">${ch.length}/${l.length}</td>
+      <td class="n ${cls(somma(ch, x => x.profitto_netto))}">${ch.length ? num(somma(ch, x => x.profitto_netto), 2, true) : "—"}</td>
+      <td class="n">${cl.length ? pct(cl.reduce((a, b) => a + b, 0) / cl.length) + ` <span class="piccolo">(${cl.length})</span>` : "—"}</td></tr>`;
+  }).join("");
+}
+
+function statoServer(log) {
+  const voci = [
+    ["reale_fotografia", "Fotografie delle quote", 3 * 60],
+    ["reale_chiusura", "Chiusure (CLV)", null],
+    ["reale_contabilizza", "Esiti da Betfair", null],
+    ["carta_btts_contabilizza", "Goal/No Goal su carta", 26 * 60]
+  ];
+  return voci.map(([job, nome, maxMin]) => {
+    const r = log.find(x => x.job === job);
+    if (!r) return `<div class="box"><div class="l">${nome}</div><div class="d">—</div>
+      <div class="l">non ancora eseguito</div></div>`;
+    const min = (Date.now() - new Date(r.eseguito_il)) / 60000;
+    const k = r.esito !== "ok" ? " errore" : (maxMin && min > maxMin ? " vecchio" : "");
+    return `<div class="box${k}"><div class="l">${nome}</div>
+      <div class="d">${quando(r.eseguito_il)}</div>
+      <div class="l">${r.esito !== "ok" ? "errore: " + esc((r.dettaglio || "").slice(0, 80)) : fa(r.eseguito_il)}</div></div>`;
+  }).join("");
+}
+
+/* ------------------------------------------------------------ pagina */
+function costruisci(d) {
+  const c = calcola(d);
+  const pre = d.pre;
+  const [vcls, vlab, vtxt] = verdetto(c, pre);
+  const [v1, v2] = (pre.clv || {}).valutazioni_a_giocate || [150, 200];
+  const ev = (pre.attese_se_ha_ragione_il_mercato || {}).valore_atteso_per_euro_giocato;
+  const atteso = vuoto(ev) ? null : ev * c.volume;
+  const saldo = d.saldo ? Number(d.saldo.totale) : c.saldoTurno;
+  const saldoNota = d.saldo ? `letto da Betfair ${fa(d.saldo.il)}`
+    : (c.saldoTurno !== null ? "all'ultimo turno (il server non l'ha ancora riletto)" : "");
+  const ordinate = (l, desc) => l.slice().sort((a, b) =>
+    desc ? String(b.inizio).localeCompare(String(a.inizio)) : String(a.inizio).localeCompare(String(b.inizio)));
+
+  return `
+<header>
+  <div class="head-row">
+    <div>
+      <div class="eyebrow">Soldi veri · betfair.it · Premier League e Serie A</div>
+      <h1>Conto reale</h1>
+      <p class="sub">Le giocate piazzate dal server su betfair.it, con le stesse regole pre-registrate
+      dell'esperimento. Il giudizio si dà sul CLV, non sul saldo.</p>
+    </div>
+    <div class="stamp">${esc(sessione.email)}<br>letto alle ${new Date().toLocaleTimeString("it-IT",
+      {hour: "2-digit", minute: "2-digit"})}<br>
+      <button class="link" id="ricarica">rileggi</button> · <button class="link" id="esci">esci</button></div>
+  </div>
+</header>
+
+<section>
+  <div class="shead"><h2>Il criterio: CLV</h2></div>
+  <p class="nota">Quanto la quota presa era migliore (positivo) o peggiore della quota di betfair.it
+  a ridosso del via. Non dipende da come finisce la partita: per questo è il criterio pre-registrato,
+  con le valutazioni a ${v1} e ${v2} giocate.</p>
+  <div class="metriche">
+    <div class="met primaria"><div class="k">CLV medio</div>
+      <div class="val ${cls(c.media)}">${pct(c.media)}</div>
+      <div class="note">${c.n ? `su ${c.n} giocate con chiusura` : "nessuna chiusura ancora"}</div></div>
+    <div class="met"><div class="k">Intervallo al 95%</div>
+      <div class="val" style="font-size:20px">${c.lo === null ? "—" : pct(c.lo) + " / " + pct(c.hi)}</div>
+      <div class="note">${c.se === null ? "servono almeno 2 giocate" : "errore standard " + pct(c.se, 1, false)}</div></div>
+    <div class="met"><div class="k">Positive</div>
+      <div class="val">${c.n ? d.giocate.filter(x => !vuoto(x.clv) && Number(x.clv) > 0).length + "/" + c.n : "—"}</div>
+      <div class="note">quota migliore della chiusura</div></div>
+  </div>
+  <div class="pannello">
+    <div class="riga"><span class="k">Verso la valutazione</span>
+      <span class="v">${c.n} di ${v2}</span><span class="vchip ${vcls}">${vlab}</span></div>
+    <div class="barra"><i style="width:${Math.min(100, 100 * c.n / v2)}%"></i>
+      <b style="left:${100 * v1 / v2}%" title="prima valutazione"></b></div>
+    <div class="scala"><span>0</span><span>${v1}</span><span>${v2}</span></div>
+    <p class="nota">${vtxt}</p>
+  </div>
+</section>
+
+<section>
+  <div class="shead"><h2>Esecuzione</h2></div>
+  <p class="nota">Se Betfair abbina davvero quello che il sistema decide, e a che prezzo. È la misura che
+  sulla carta non esiste.</p>
+  <div class="metriche">
+    <div class="met"><div class="k">Abbinato</div>
+      <div class="val">${c.richiesto ? pct(c.abbinato / c.richiesto, 0, false) : "—"}</div>
+      <div class="note">${num(c.abbinato)} € su ${num(c.richiesto)} € richiesti</div></div>
+    <div class="met"><div class="k">Quota abbinata</div>
+      <div class="val ${cls(c.scarto)}">${c.scarto === null ? "—" : pct(c.scarto, 2)}</div>
+      <div class="note">rispetto a quella letta prima dell'invio · ${c.nAbbinate} ordini</div></div>
+    <div class="met"><div class="k">Da controllare</div>
+      <div class="val ${c.problemi.length ? "neg" : ""}">${c.problemi.length}</div>
+      <div class="note">respinte, incerte o non inviate</div></div>
+  </div>
+</section>
+
+<section>
+  <div class="shead"><h2>Soldi</h2></div>
+  <p class="nota">Il risultato è la somma delle giocate chiuse, al netto della commissione: i versamenti
+  non lo toccano. Su poche decine di giocate è quasi tutto fortuna, in una direzione o nell'altra.</p>
+  <div class="metriche">
+    <div class="met primaria"><div class="k">Saldo</div>
+      <div class="val">${saldo === null ? "—" : num(saldo) + " €"}</div>
+      <div class="note">${saldoNota}</div></div>
+    <div class="met"><div class="k">Risultato netto</div>
+      <div class="val ${cls(c.netto)}">${c.chiuse.length ? num(c.netto, 2, true) + " €" : "—"}</div>
+      <div class="note">${c.decise.length ? `${c.vinte} vinte su ${c.decise.length} · ${num(c.volume)} € giocati` : "nessuna giocata chiusa"}</div></div>
+    <div class="met"><div class="k">Commissioni</div>
+      <div class="val">${num(c.commissioni)} €</div>
+      <div class="note">pagate a Betfair sulle vincite</div></div>
+    <div class="met"><div class="k">In gioco</div>
+      <div class="val">${num(c.esposto)} €</div>
+      <div class="note">${c.aperte.length} giocate aperte</div></div>
+    <div class="met"><div class="k">Se il mercato ha ragione</div>
+      <div class="val">${atteso === null || !c.volume ? "—" : num(atteso, 2, true) + " €"}</div>
+      <div class="note">risultato atteso: ${vuoto(ev) ? "—" : pct(ev, 1)} di quanto giocato (pre-registrato)</div></div>
+  </div>
+</section>
+
+${c.problemi.length ? `<section>
+  <div class="shead"><h2>Da controllare</h2><span class="stamp">${c.problemi.length}</span></div>
+  <p class="nota">Giocate decise ma non andate a buon fine. Vanno guardate su betfair.it e, se serve,
+  riprese con <code>--invia --riprendi</code>.</p>
+  ${tabellaGiocate(ordinate(c.problemi, true), "")}
+</section>` : ""}
+
+<section>
+  <div class="shead"><h2>In corso</h2><span class="stamp">${c.aperte.length}</span></div>
+  ${tabellaGiocate(ordinate(c.aperte, false), "nessuna giocata aperta")}
+</section>
+
+<section>
+  <div class="shead"><h2>Chiuse</h2><span class="stamp">${c.chiuse.length}</span></div>
+  ${tabellaGiocate(ordinate(c.chiuse, true), "nessuna giocata chiusa: gli esiti arrivano da Betfair entro mezz'ora dalla fine")}
+</section>
+
+<section>
+  <div class="shead"><h2>Per turno</h2></div>
+  <div class="tabellone"><table style="min-width:560px">
+    <thead><tr><th>Turno</th><th class="n">Giocate</th><th class="n">Saldo al turno</th><th class="n">Giocati €</th>
+      <th class="n">Chiuse</th><th class="n">Netto €</th><th class="n">CLV medio</th></tr></thead>
+    <tbody>${perTurno(d.giocate) || '<tr><td colspan="7" class="vuoto">nessun turno</td></tr>'}</tbody>
+  </table></div>
+</section>
+
+<section>
+  <div class="shead"><h2>Il server</h2></div>
+  <p class="nota">Ultima esecuzione dei lavori automatici. Le chiusure e gli esiti girano solo quando c'è
+  una giocata da aggiornare: se non ce ne sono, è normale che restino fermi.</p>
+  <div class="stato">${statoServer(d.log)}</div>
+</section>
+
+<footer>
+  <p>Regole pre-registrate l'8/10/2026 (<code>preregistrazioni.braccio_reale</code>): edge sulla quota netta
+  fra 2% e 10%, quote fra 1,20 e 15, Kelly 1/4 sul saldo, massimo 1% del saldo e 10 € per giocata, 20% per
+  turno. Ordini LIMIT alla quota letta, mai in-play. Nessuno stop automatico.</p>
+  <p>Questa pagina legge soltanto: scrive solo il server. I dati si aprono solo con un account autorizzato;
+  la chiave nel codice della pagina, da sola, non legge nulla.</p>
+</footer>`;
+}
+
+/* ------------------------------------------------------------ avvio */
+async function carica() {
+  mostra("caricamento");
+  try {
+    const d = await raccogli();
+    if (d.stato === "senza_permessi") return avviso("Permessi non ancora impostati",
+      "Nel database manca la tabella degli account autorizzati: va lanciato cloud/sql/accesso_reale.sql nel SQL Editor di Supabase.");
+    if (d.stato === "non_autorizzato") return avviso("Account non autorizzato",
+      `L'accesso con ${sessione.email} è riuscito, ma questo account non è fra quelli autorizzati a vedere il conto reale.`);
+    $("pagina").innerHTML = costruisci(d);
+    mostra("pagina");
+    $("ricarica").addEventListener("click", carica);
+    $("esci").addEventListener("click", esci);
+  } catch (e) {
+    if (/sessione scaduta|refresh|JWT|401/i.test(String(e.message))) { memoria("cancella"); sessione = null; mostra("accesso"); return; }
+    avviso("Non riesco a leggere il database", String(e && e.message || e));
+  }
+}
+
+$("modulo").addEventListener("submit", async ev => {
+  ev.preventDefault();
+  const b = $("entra");
+  b.disabled = true; $("errore-accesso").textContent = "";
+  try {
+    await autentica("password", {email: $("email").value.trim(), password: $("password").value});
+    $("password").value = "";
+    await carica();
+  } catch (e) {
+    $("errore-accesso").textContent = e.message;
+    mostra("accesso");
+  } finally { b.disabled = false; }
+});
+$("msg-esci").addEventListener("click", esci);
+
+(async () => {
+  const rt = memoria("leggi");
+  if (!rt) return mostra("accesso");
+  try { await autentica("refresh_token", {refresh_token: rt}); await carica(); }
+  catch (e) { memoria("cancella"); mostra("accesso"); }
+})();
+</script>
+</body>
+</html>
