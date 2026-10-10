@@ -163,6 +163,12 @@ td.m{min-width:210px}
 #azzera{font:inherit;font-size:12.5px;background:none;border:none;padding:0;cursor:pointer;
   color:var(--accent);text-decoration:underline;text-underline-offset:2px}
 tr[hidden]{display:none}
+/* righe del Goal/No Goal su carta: stesso elenco, esperimento a parte */
+.aparte{font-size:10px;letter-spacing:.04em;color:var(--accent);border:1px solid var(--accent);
+  border-radius:2px;padding:1px 5px;margin-left:6px;text-transform:uppercase;white-space:nowrap}
+.esito.n{color:var(--muted);border-color:var(--line)}
+tr.sottotitolo td{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);
+  font-weight:600;background:var(--raise);padding:8px 12px 6px}
 
 footer{border-top:1px solid var(--line);padding-top:20px;color:var(--faint);font-size:12.5px}
 footer p{margin:0 0 6px;max-width:74ch}
@@ -212,8 +218,9 @@ const LEGHE = {E0:"Premier League", I1:"Serie A", SP1:"La Liga",
                D1:"Bundesliga", F1:"Ligue 1"};
 const SEL_IT = {"1X2|1":"1","1X2|X":"X","1X2|2":"2",
                 "OU25|over":"Over 2.5","OU25|under":"Under 2.5",
-                "GG|gg":"Gol","GG|ng":"NoGol"};
-const ORDINE_TIPI = ["1","X","2","Over 2.5","Under 2.5","Gol","NoGol"];
+                "GG|gg":"Goal","GG|ng":"No Goal"};
+const ORDINE_TIPI = ["1","X","2","Over 2.5","Under 2.5","Goal","No Goal"];
+const TAG_APARTE = ` <span class="aparte" title="Goal/No Goal su carta: esperimento a parte, prezzi betfair.it, bankroll virtuale 400 €. Non entra nei numeri dell'esperimento principale.">a parte</span>`;
 
 /* ---------------------------------------------------------- utilita' */
 const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g,
@@ -289,6 +296,22 @@ async function raccogli() {
   const P = {};
   prereg.forEach(r => { P[r.chiave] = r.valore; });
 
+  // Goal/No Goal su carta nella stessa forma di `giocate`, marcate esp = "btts":
+  // entrano negli elenchi, nei filtri e nelle scomposizioni, mai nei numeri
+  // dell'esperimento principale (pre-registrato su 1X2 e Over/Under).
+  const bttsN = (btts || []).map(x => ({
+    esp: "btts", turno: x.turno, lega: x.lega, data_partita: x.data_partita,
+    casa: x.casa, trasferta: x.trasferta, mercato: "GG", selezione: x.selezione,
+    prob_modello: x.prob_modello, quota: x.quota, edge: x.edge_netto, stake: x.stake,
+    esito: x.esito || "aperta",
+    ritorno: x.esito ? Number(x.stake) + Number(x.profitto_netto || 0) : null,
+    clv: x.clv, quota_chiusura: x.quota_chiusura,
+    note: (x.gol_casa === null || x.gol_casa === undefined) ? ""
+          : `risultato ${x.gol_casa}-${x.gol_trasferta}`
+  }));
+  const bttsAperte = bttsN.filter(x => x.esito === "aperta");
+  const bttsChiuse = bttsN.filter(x => x.esito !== "aperta");
+
   const chiuse = giocate.filter(x => x.esito === "vinta" || x.esito === "persa");
   const aperte = giocate.filter(x => x.esito === "aperta");
   const stake = chiuse.reduce((s, x) => s + Number(x.stake), 0);
@@ -316,7 +339,9 @@ async function raccogli() {
     esposto: aperte.reduce((s, x) => s + Number(x.stake), 0),
     band: P.band_esperimento || null,
     meta: P.meta_esperimento || {},
-    log, fresh, btts,
+    log, fresh, btts, bttsAperte, bttsChiuse,
+    // elenchi e filtri: le due serie insieme
+    aperteTab: aperte.concat(bttsAperte), chiuseTab: chiuse.concat(bttsChiuse),
     aggiornato: new Date().toLocaleString("it-IT",
       { day: "2-digit", month: "2-digit", year: "numeric",
         hour: "2-digit", minute: "2-digit" })
@@ -392,11 +417,14 @@ function graficoBanda(d) {
 
 /* ------------------------------------------------------------ tabelle */
 function rigaAperta(x) {
-  return `<tr data-lega="${esc(x.lega)}" data-tipo="${esc(tipoDi(x))}" data-stake="${Number(x.stake)}">
+  const b = x.esp === "btts";
+  // il CLV del Goal/No Goal esiste gia' al fischio d'inizio (chiusura letta da Betfair)
+  const clvAttr = b && x.clv !== null && x.clv !== undefined ? ` data-clv="${Number(x.clv)}"` : "";
+  return `<tr data-esp="${b ? "btts" : "principale"}" data-lega="${esc(x.lega)}" data-tipo="${esc(tipoDi(x))}" data-stake="${Number(x.stake)}"${clvAttr}>
  <td class="d">${esc(x.data_partita.slice(8, 10))}/${esc(x.data_partita.slice(5, 7))}</td>
  <td><span class="lega">${esc(x.lega)}</span></td>
  <td class="m">${esc(x.casa)} <span class="v">–</span> ${esc(x.trasferta)}</td>
- <td><span class="sel">${esc(tipoDi(x))}</span></td>
+ <td><span class="sel">${esc(tipoDi(x))}</span>${b ? TAG_APARTE : ""}</td>
  <td class="n">${num(x.prob_modello, 3)}</td>
  <td class="n">${num(x.quota)}</td>
  <td class="n edge">${pct(x.edge)}</td>
@@ -416,18 +444,21 @@ function rigaChiusa(x) {
     ? ` <span class="provv" title="Esito da Understat: football-data non ha ancora pubblicato la partita, il CLV verrà calcolato al prossimo aggiornamento">provv.</span>`
     : "";
   const clvAttr = (clv === null || clv === undefined) ? "" : ` data-clv="${Number(clv)}"`;
-  return `<tr data-lega="${esc(x.lega)}" data-tipo="${esc(tipoDi(x))}" data-stake="${Number(x.stake)}" data-pnl="${pnl}"${clvAttr}>
+  const b = x.esp === "btts";
+  const etichetta = x.esito === "void" ? `<span class="esito n">void</span>`
+    : `<span class="esito ${vinta ? "v" : "p"}">${vinta ? "vinta" : "persa"}</span>`;
+  return `<tr data-esp="${b ? "btts" : "principale"}" data-lega="${esc(x.lega)}" data-tipo="${esc(tipoDi(x))}" data-stake="${Number(x.stake)}" data-pnl="${pnl}"${clvAttr}>
  <td class="d">${esc(x.data_partita.slice(8, 10))}/${esc(x.data_partita.slice(5, 7))}</td>
  <td><span class="lega">${esc(x.lega)}</span></td>
  <td class="m">${esc(x.casa)} <span class="v">–</span> ${esc(x.trasferta)}</td>
- <td><span class="sel">${esc(tipoDi(x))}</span></td>
+ <td><span class="sel">${esc(tipoDi(x))}</span>${b ? TAG_APARTE : ""}</td>
  <td class="n">${num(x.stake)}</td>
  <td class="n">${num(x.quota)}</td>
  <td class="n">${x.quota_chiusura ? num(x.quota_chiusura) : "—"}</td>
  <td class="n ${cls}">${clv !== null && clv !== undefined ? pct(clv) : "—"}</td>
  <td class="n ris">${esc(risultatoDi(x)) || "—"}</td>
- <td><span class="esito ${vinta ? "v" : "p"}">${vinta ? "vinta" : "persa"}</span>${tagProvv}</td>
- <td class="n ${pnl > 0 ? "pos" : "neg"}">${num(pnl, 2, true)}</td></tr>`;
+ <td>${etichetta}${tagProvv}</td>
+ <td class="n ${pnl > 0 ? "pos" : pnl < 0 ? "neg" : ""}">${num(pnl, 2, true)}</td></tr>`;
 }
 
 /* ------------------------------------------------------- scomposizione */
@@ -470,16 +501,22 @@ function rigaScomposizione(r) {
  <td>${pochi ? '<span class="vchip no">poco dati</span>' : ""}</td></tr>`;
 }
 
-function tabellaScomposizione(righe, intestazione) {
-  const corpo = righe.map(rigaScomposizione).join("");
+// gruppi: [{titolo, righe}]. Con un solo gruppo niente sottotitolo, come prima.
+function tabellaScomposizione(gruppi, intestazione) {
+  const corpo = gruppi.map(g => {
+    const testa = gruppi.length > 1 ? `<tr class="sottotitolo"><td colspan="5">${g.titolo}</td></tr>` : "";
+    const righe = g.righe.map(rigaScomposizione).join("")
+      || '<tr><td colspan="5" class="vuoto">nessuna giocata conclusa</td></tr>';
+    return testa + righe;
+  }).join("");
   return `<div class="tabellone"><table>
     <thead><tr><th>${intestazione}</th><th class="n">N</th><th class="n">ROI</th><th class="n">P&amp;L €</th><th></th></tr></thead>
-    <tbody>${corpo || '<tr><td colspan="5" class="vuoto">nessuna giocata conclusa</td></tr>'}</tbody>
+    <tbody>${corpo}</tbody>
   </table></div>`;
 }
 
 function barraFiltri(d) {
-  const tutte = d.aperte.concat(d.chiuse);
+  const tutte = d.aperteTab.concat(d.chiuseTab);
   const nLega = {}, nTipo = {};
   tutte.forEach(x => {
     nLega[x.lega] = (nLega[x.lega] || 0) + 1;
@@ -491,8 +528,8 @@ function barraFiltri(d) {
     (n === undefined ? "" : ` <span class="cnt">${n}</span>`) + `</button>`;
 
   const stato = chip("stato", "tutte", "Tutte") +
-                chip("stato", "aperte", "In corso", d.aperte.length) +
-                chip("stato", "chiuse", "Concluse", d.chiuse.length);
+                chip("stato", "aperte", "In corso", d.aperteTab.length) +
+                chip("stato", "chiuse", "Concluse", d.chiuseTab.length);
   const leghe = chip("lega", "", "Tutti") +
                 Object.entries(LEGHE).map(([k, v]) => chip("lega", k, v, nLega[k] || 0)).join("");
   const presenti = ORDINE_TIPI.filter(t => t in nTipo)
@@ -513,76 +550,43 @@ function barraFiltri(d) {
 
 /* -------------------------------------------------------------- pagina */
 /* ------------------------------------------- Goal/No Goal su carta */
-// Esperimento separato, iniziato il 10/10/2026: non entra in nessun numero
-// della pagina sopra (che e' l'esperimento 1X2 / Over-Under). Prezzi
-// betfair.it, bankroll virtuale 400 EUR, cinque campionati, nessun denaro.
-function sezioneBtts(righe) {
-  if (righe === null) return "";
-  const testa = `<section id="sez-btts">
-  <div class="shead"><h2>Goal/No Goal — esperimento su carta separato</h2>
-    <span class="stamp conta">${righe.length} registrate</span></div>
-  <p class="nota">Un secondo esperimento, iniziato il 10 ottobre 2026 e <strong>tenuto fuori da tutti
-  i numeri qui sopra</strong>. Il modello calcola la probabilità che segnino entrambe le squadre, ma
-  su questo mercato non è mai stato verificato. Qui lo si misura prima di rischiare denaro: stesse
-  regole di selezione, prezzi di betfair.it, cinque campionati, bankroll virtuale di 400 €. Il
-  criterio è il CLV; il P&amp;L è virtuale e solo informativo.</p>`;
-  if (!righe.length) {
-    return testa + `<div class="pannello"><p class="vuoto">nessuna giocata ancora registrata</p></div></section>`;
-  }
-  const chiuse = righe.filter(x => x.esito === "vinta" || x.esito === "persa");
-  const clvs = righe.filter(x => x.clv !== null && x.clv !== undefined).map(x => Number(x.clv));
-  const media = clvs.length ? clvs.reduce((a, b) => a + b, 0) / clvs.length : null;
-  const sd = clvs.length > 1
-    ? Math.sqrt(clvs.reduce((a, c) => a + (c - media) ** 2, 0) / (clvs.length - 1)) : null;
-  const se = sd !== null ? sd / Math.sqrt(clvs.length) : null;
-  const puntato = chiuse.reduce((a, x) => a + Number(x.stake), 0);
-  const pnl = chiuse.reduce((a, x) => a + Number(x.profitto_netto || 0), 0);
-  const nome = x => x.selezione === "gg" ? "Goal" : "NoGoal";
-  const riga = x => {
-    const clv = x.clv;
-    const cls = (clv === null || clv === undefined || Number(clv) === 0) ? "" : (Number(clv) > 0 ? "pos" : "neg");
-    const fin = (x.gol_casa === null || x.gol_casa === undefined) ? "—" : `${x.gol_casa}-${x.gol_trasferta}`;
-    const es = x.esito === "vinta" ? `<span class="esito v">vinta</span>`
-             : x.esito === "persa" ? `<span class="esito p">persa</span>` : "in corso";
-    const p = x.profitto_netto === null || x.profitto_netto === undefined ? null : Number(x.profitto_netto);
-    return `<tr>
- <td class="d">${esc(x.data_partita.slice(8, 10))}/${esc(x.data_partita.slice(5, 7))}</td>
- <td><span class="lega">${esc(x.lega)}</span></td>
- <td class="m">${esc(x.casa)} <span class="v">–</span> ${esc(x.trasferta)}</td>
- <td><span class="sel">${nome(x)}</span></td>
- <td class="n">${num(x.prob_modello, 3)}</td>
- <td class="n">${num(x.quota)}</td>
- <td class="n">${x.quota_chiusura ? num(x.quota_chiusura) : "—"}</td>
- <td class="n ${cls}">${clv !== null && clv !== undefined ? pct(clv) : "—"}</td>
- <td class="n ris">${fin}</td><td>${es}</td>
- <td class="n ${p > 0 ? "pos" : p < 0 ? "neg" : ""}">${p === null ? "—" : num(p, 2, true)}</td></tr>`;
-  };
-  const corpo = righe.slice().sort((a, b) => String(b.inizio).localeCompare(String(a.inizio)))
-                     .map(riga).join("");
-  return testa + `
+// Esperimento a parte, iniziato il 10/10/2026: le sue righe stanno negli elenchi
+// e nelle scomposizioni (marcate «a parte»), ma i suoi numeri restano qui e non
+// entrano in quelli dell'esperimento principale. Prezzi betfair.it, bankroll
+// virtuale 400 EUR, cinque campionati, nessun denaro. Si aggiornano coi filtri.
+function sezioneBtts(d) {
+  if (d.btts === null) return "";
+  const n = d.bttsAperte.length + d.bttsChiuse.length;
+  return `<section id="sez-btts">
+  <div class="shead"><h2>Goal/No Goal — esperimento su carta a parte</h2>
+    <span class="stamp">${n} registrate</span></div>
+  <p class="nota">Un secondo esperimento, iniziato il 10 ottobre 2026. Il modello calcola la probabilità
+  che segnino entrambe le squadre, ma su questo mercato non è mai stato verificato: qui lo si misura
+  prima di rischiare denaro, con le stesse regole di selezione, i prezzi di betfair.it, cinque
+  campionati e un bankroll virtuale di 400 €. Le sue giocate compaiono negli elenchi qui sotto,
+  marcate <span class="aparte">a parte</span>, ma <strong>non entrano nei numeri qui sopra</strong>.
+  Il criterio è il CLV, misurato alla chiusura di Betfair, che c'è già al fischio d'inizio: per questo
+  conta anche le giocate in corso. Il P&amp;L è virtuale e solo informativo.</p>
   <div class="metriche">
     <div class="met primaria"><div class="k">CLV medio</div>
-      <div class="val ${media === null ? "" : media > 0 ? "pos" : "neg"}">${pct(media)}</div>
-      <div class="note">${clvs.length ? `± ${pct(se, 1, false)} (errore standard) su ${clvs.length}` : "nessuna chiusura ancora"} · giudizio a 150 e 200 giocate</div></div>
-    <div class="met"><div class="k">Concluse</div><div class="val">${chiuse.length}</div>
-      <div class="note">${righe.length - chiuse.length} in corso</div></div>
-    <div class="met"><div class="k">ROI virtuale</div>
-      <div class="val ${puntato && pnl > 0 ? "pos" : puntato ? "neg" : ""}">${puntato ? pct(pnl / puntato) : "—"}</div>
-      <div class="note">${num(pnl, 2, true)} € su ${num(puntato)} € puntati</div></div>
+      <div class="val" id="b-clv">—</div><div class="note" id="b-clv-note">—</div></div>
+    <div class="met"><div class="k">Concluse</div><div class="val" id="b-concl">—</div>
+      <div class="note" id="b-concl-note">—</div></div>
+    <div class="met"><div class="k">ROI virtuale</div><div class="val" id="b-roi">—</div>
+      <div class="note" id="b-roi-note">—</div></div>
   </div>
-  <div class="tabellone" style="margin-top:6px"><table>
-    <thead><tr><th>Data</th><th>Lega</th><th>Partita</th><th>Giocata</th><th class="n">p</th>
-      <th class="n">Presa</th><th class="n">Chiusura</th><th class="n">CLV</th><th class="n">Finita</th>
-      <th>Esito</th><th class="n">P&amp;L €</th></tr></thead>
-    <tbody>${corpo}</tbody>
-  </table></div>
 </section>`;
 }
 
 function costruisci(d) {
   const clvNeg = d.clv_medio !== null && d.clv_medio < 0;
-  const perLega = scomponiChiuse(d.chiuse, x => LEGHE[x.lega] || x.lega);
-  const perTipo = scomponiChiuse(d.chiuse, x => tipoDi(x));
+  const PRINC = "Esperimento principale · 1X2 e Over/Under";
+  const BTTS = "Goal/No Goal · su carta, a parte";
+  const conBtts = d.btts !== null;
+  const perLega = [{ titolo: PRINC, righe: scomponiChiuse(d.chiuse, x => LEGHE[x.lega] || x.lega) }]
+    .concat(conBtts ? [{ titolo: BTTS, righe: scomponiChiuse(d.bttsChiuse, x => LEGHE[x.lega] || x.lega) }] : []);
+  const perTipo = [{ titolo: PRINC, righe: scomponiChiuse(d.chiuse, x => tipoDi(x)) }]
+    .concat(conBtts ? [{ titolo: BTTS, righe: scomponiChiuse(d.bttsChiuse, x => tipoDi(x)) }] : []);
   const verdetto = clvNeg
     ? `Il CLV medio è negativo: sulle giocate concluse la quota ottenuta era in media
        <strong>peggiore</strong> di quella a cui il mercato ha chiuso. È il segnale che il par. 6
@@ -611,10 +615,10 @@ function costruisci(d) {
      <td class="n">${x.righe === null || x.righe === undefined ? "—" : esc(x.righe)}</td></tr>`
   ).join("");
 
-  const aperte = d.aperte.slice().sort((a, b) => a.data_partita.localeCompare(b.data_partita))
-                          .map(rigaAperta).join("");
-  const chiuse = d.chiuse.slice().sort((a, b) => b.data_partita.localeCompare(a.data_partita))
-                          .map(rigaChiusa).join("");
+  const aperte = d.aperteTab.slice().sort((a, b) => a.data_partita.localeCompare(b.data_partita))
+                             .map(rigaAperta).join("");
+  const chiuse = d.chiuseTab.slice().sort((a, b) => b.data_partita.localeCompare(a.data_partita))
+                             .map(rigaChiusa).join("");
   const nProvv = d.chiuse.filter(x =>
     (x.clv === null || x.clv === undefined) && /Understat/.test(x.note || "")).length;
   const notaProvv = nProvv
@@ -675,6 +679,8 @@ function costruisci(d) {
   </div>
 </section>
 
+${sezioneBtts(d)}
+
 <section>
   <div class="shead"><h2>Quanto puoi fidarti di questo ROI</h2></div>
   <p class="nota">Il ROI da solo non dice quanto è preciso. Qui l'intervallo entro cui cade
@@ -701,7 +707,8 @@ function costruisci(d) {
   <p class="nota">Ordinato per numero di giocate concluse, non per ROI: la fetta con più dati dietro
   viene prima, non quella che ha reso meglio finora. Sotto le 8 giocate il ROI di quella riga può
   ribaltarsi con la prossima — per questo è marcata "poco dati" invece che lasciata in cima solo
-  perché è nata bene. Non risente dei filtri qui sotto: è già la scomposizione completa.</p>
+  perché è nata bene. Non risente dei filtri qui sotto: è già la scomposizione completa. Il
+  Goal/No Goal ha le sue righe, sotto, e non si somma all'esperimento principale.</p>
   ${tabellaScomposizione(perLega, "Campionato")}
 </section>
 
@@ -740,12 +747,14 @@ function costruisci(d) {
 <section>
   <div class="shead"><h2>Le giocate</h2></div>
   <p class="nota">I filtri cambiano anche i riquadri qui sopra, non solo la tabella: su una
-  selezione piccola CLV e ROI oscillano molto e vanno letti con cautela, non come una scoperta.</p>
+  selezione piccola CLV e ROI oscillano molto e vanno letti con cautela, non come una scoperta.
+  Le giocate Goal/No Goal, marcate <span class="aparte">a parte</span>, contano solo nel loro
+  riquadro.</p>
   ${barraFiltri(d)}
 </section>
 
 <section id="sez-aperte">
-  <div class="shead"><h2>Giocate in corso</h2><span class="stamp conta">${d.aperte.length} in corso</span></div>
+  <div class="shead"><h2>Giocate in corso</h2><span class="stamp conta">${d.aperteTab.length} in corso</span></div>
   <div class="tabellone"><table>
     <thead><tr><th>Data</th><th>Lega</th><th>Partita</th><th>Giocata</th>
       <th class="n">p</th><th class="n">Quota</th><th class="n">Edge</th><th class="n">Punta €</th></tr></thead>
@@ -755,7 +764,7 @@ function costruisci(d) {
 </section>
 
 <section id="sez-chiuse">
-  <div class="shead"><h2>Giocate concluse</h2><span class="stamp conta">${d.chiuse.length} concluse</span></div>
+  <div class="shead"><h2>Giocate concluse</h2><span class="stamp conta">${d.chiuseTab.length} concluse</span></div>
   ${notaProvv}
   <div class="tabellone"><table>
     <thead><tr><th>Data</th><th>Lega</th><th>Partita</th><th>Giocata</th>
@@ -765,8 +774,6 @@ function costruisci(d) {
       <tr class="nessuna" hidden><td colspan="11" class="vuoto">nessuna giocata conclusa con questi filtri</td></tr></tbody>
   </table></div>
 </section>
-
-${sezioneBtts(d.btts)}
 
 <section>
   <div class="shead"><h2>Stato dei dati</h2></div>
@@ -787,6 +794,9 @@ ${sezioneBtts(d.btts)}
   <p>Dati: football-data.co.uk per risultati e quote, Understat per gli xG e come fonte-ponte dei
   risultati finché football-data non pubblica (giocate <span class="provv">provv.</span>). Il benchmark
   è la quota massima di chiusura; Pinnacle non è più pubblicato dal 2026/27.</p>
+  <p>Goal/No Goal: esperimento su carta a parte dal 10/10/2026, prezzi di betfair.it al netto della
+  commissione del 4,5%, chiusura letta da Betfair a ridosso del via. Ha la sua pre-registrazione e non
+  si somma all'esperimento principale.</p>
   <p>Questa pagina legge Supabase in sola lettura a ogni apertura: non c'è una copia da rigenerare,
   e quindi non c'è una copia che possa restare indietro.</p>
 </footer>`;
@@ -812,6 +822,8 @@ function attivaFiltri() {
     let visti = 0;
     let stakeChiuse = 0, pnl = 0, clvSum = 0, clvN = 0, clvPos = 0, nChiuse = 0;
     let esposto = 0, nAperte = 0, mostraChiuse = false, rets = [];
+    // Goal/No Goal: accumulatori a parte, alimentano solo il suo riquadro
+    const B = { stake: 0, pnl: 0, chiuse: 0, aperte: 0, clv: [] };
 
     ["aperte", "chiuse"].forEach(k => {
       const sez = sezioni[k];
@@ -826,7 +838,11 @@ function attivaFiltri() {
         tr.hidden = !ok;
         if (ok) {
           n++;
-          if (mostraSez) {
+          if (mostraSez && tr.dataset.esp === "btts") {
+            if (tr.dataset.clv !== undefined) B.clv.push(parseFloat(tr.dataset.clv));
+            if (k === "aperte") B.aperte++;
+            else { B.chiuse++; B.stake += parseFloat(tr.dataset.stake); B.pnl += parseFloat(tr.dataset.pnl); }
+          } else if (mostraSez) {
             const stake = parseFloat(tr.dataset.stake);
             if (k === "aperte") {
               esposto += stake; nAperte++;
@@ -885,6 +901,23 @@ function attivaFiltri() {
     setCls("m-pnl", pnl > 0 ? "pos" : "neg");
     setTxt("m-open", String(nAperte));
     setTxt("m-open-note", num(esposto, 2, false) + " € esposti");
+
+    // riquadro Goal/No Goal
+    if (document.getElementById("b-clv")) {
+      const nB = B.clv.length;
+      const mB = nB ? B.clv.reduce((a, c) => a + c, 0) / nB : null;
+      const seB = nB > 1 ? Math.sqrt(B.clv.reduce((a, c) => a + (c - mB) ** 2, 0) / (nB - 1)) / Math.sqrt(nB) : null;
+      setTxt("b-clv", pct(mB));
+      setCls("b-clv", mB === null ? "" : mB > 0 ? "pos" : "neg");
+      setTxt("b-clv-note", nB ? ((seB !== null ? "± " + pct(seB, 1, false) + " (errore standard) · " : "") +
+        "su " + nB + " con chiusura · giudizio a 150 e 200") : (filtra ? "nessuna nella selezione" : "nessuna chiusura ancora"));
+      setTxt("b-concl", String(B.chiuse));
+      setTxt("b-concl-note", B.aperte + " in corso" + (filtra ? " nella selezione" : ""));
+      const roiB = B.stake ? B.pnl / B.stake : null;
+      setTxt("b-roi", pct(roiB));
+      setCls("b-roi", roiB === null ? "" : roiB > 0 ? "pos" : "neg");
+      setTxt("b-roi-note", num(B.pnl, 2, true) + " € su " + num(B.stake, 2, false) + " € puntati");
+    }
 
     // grafico CLV: stessi filtri delle righe, scala fissa, mediana ricalcolata
     const svg = document.getElementById("clv-chart");
