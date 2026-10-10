@@ -202,4 +202,27 @@ Non manda mai due volte lo stesso ordine.
 
 Log di ogni ordine: tabella `ordini_log` e copia locale in `~/.betfair/ordini/`.
 
-Test senza rete, dalla cartella `cloud/`: `python tests/betfair_prova.py`, `python tests/reale.py`, `python tests/carta_btts.py`.
+Test senza rete, dalla cartella `cloud/`: `python tests/betfair_prova.py`, `python tests/reale.py`, `python tests/carta_btts.py`, `python tests/contabilizza.py`.
+
+## 9. Esiti e dashboard privata
+
+Gli esiti delle giocate reali li scrive il timer **`pengwin-contabilizza`** (ogni 30 minuti,
+alle :10 e alle :40, con la Live). Chiede a Betfair (`listClearedOrders`) le giocate iniziate
+da oltre 1 ora e 45 e non ancora contabilizzate: esito, profitto, commissione del mercato,
+void. Scrive anche il saldo del conto in `saldi_reali` quando cambia. Se non c'è niente da
+regolare non fa nemmeno il login. A mano, senza scrivere:
+
+```bash
+bash server/con_live.sh -m src.reale.contabilizza --prova
+```
+
+La **dashboard privata** è `docs/reale.html` (GitHub Pages, accanto a quella pubblica). Si entra
+con email e password di un account Supabase Auth autorizzato:
+
+1. Supabase → Authentication → Users → Add user (email, password, *Auto Confirm User*); poi
+   Sign In / Providers → spegnere *Allow new users to sign up*.
+2. SQL Editor: `cloud/sql/accesso_reale.sql` (tabelle `accesso_reale` e `saldi_reali`, policy di
+   sola lettura per gli autorizzati, nessun permesso alla chiave pubblica).
+3. SQL Editor: `insert into accesso_reale (uid) select id from auth.users on conflict do nothing;`
+   e controllare con la `select` in fondo al file che gli account siano quelli giusti.
+
