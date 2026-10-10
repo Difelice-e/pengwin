@@ -74,6 +74,11 @@ def main(argv=None) -> int:
                     help="registra anche con campionati fermi da oltre "
                          f"{MAX_ETA} giorni. Scelta deliberata di una persona: "
                          "annotare il turno come degradato nel runbook.")
+    ap.add_argument("--controllo-strutturale", action="store_true",
+                    dest="controllo_strutturale",
+                    help="giudica i dati vecchi dal calendario (partite gia' giocate "
+                         "senza risultato), non dai giorni: e' il controllo del turno "
+                         "programmato, che dopo una sosta non deve bloccarsi a vuoto")
     a = ap.parse_args(argv)
 
     db = client()
@@ -99,6 +104,22 @@ def main(argv=None) -> int:
     # deve bloccare la scrittura da sola, senza dipendere da chi legge.
     # E' l'errore che ha viziato il turno del 4 settembre 2026: Bundesliga ferma
     # al 16 maggio, previsioni calcolate lo stesso.
+    if a.controllo_strutturale:
+        # src/report/freschezza.py: una sosta non e' un buco, una partita giocata
+        # e assente dai dati si'. Nessuna deroga possibile da qui.
+        from src.report import freschezza
+        motivi = freschezza.controlla(db, d, sorted(models))
+        if motivi and a.registra:
+            print("\n[!] RIFIUTATO: dati non aggiornati (controllo strutturale):")
+            for m in motivi:
+                print(f"      {m}")
+            print("    Nessuna previsione e' stata scritta. Il turno si salta.")
+            db.log("predict", "rifiutato", 0, "; ".join(motivi)[:500])
+            return 2
+        print("dati: controllo strutturale " + ("superato" if not motivi else
+              "NON superato: " + "; ".join(motivi)))
+        vecchi = []
+
     if a.registra and vecchi and not a.consenti_dati_vecchi:
         print("\n[!] RIFIUTATO: dati fermi da oltre "
               f"{MAX_ETA} giorni in {len(vecchi)} campionat"

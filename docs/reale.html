@@ -104,6 +104,21 @@ footer{border-top:1px solid var(--line);padding-top:20px;color:var(--faint);font
 footer p{margin:0 0 6px;max-width:74ch}
 code{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12px;
   background:var(--raise);border:1px solid var(--line);padding:1px 5px;border-radius:2px}
+.interruttore{display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap;
+  background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--pos);
+  border-radius:2px;padding:16px 20px}
+.interruttore.spento{border-left-color:var(--neg)}
+.interruttore .stato-i{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:18px;font-weight:500}
+.interruttore .stato-i.on{color:var(--pos)} .interruttore .stato-i.off{color:var(--neg)}
+.interruttore p{margin:3px 0 0;color:var(--muted);font-size:13px;max-width:62ch}
+button.secondario{font:inherit;font-weight:600;font-size:13.5px;background:var(--surface);
+  border:1px solid var(--line);border-radius:2px;padding:9px 14px;cursor:pointer;color:var(--ink)}
+button.secondario.ferma{border-color:var(--neg);color:var(--neg)}
+button.secondario.avvia{border-color:var(--pos);color:var(--pos)}
+button.secondario:disabled{opacity:.6;cursor:default}
+.nz{font-size:10.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;border-radius:2px;
+  padding:1px 6px;border:1px solid var(--line);color:var(--muted);white-space:nowrap;cursor:help}
+.nz.contro{color:var(--neg);border-color:var(--neg)} .nz.a_favore{color:var(--pos);border-color:var(--pos)}
 .link{font:inherit;font-size:12.5px;background:none;border:none;padding:0;cursor:pointer;
   color:var(--accent);text-decoration:underline;text-underline-offset:2px}
 
@@ -278,16 +293,25 @@ async function raccogli() {
     throw e;
   }
   if (!acc.length) return {stato: "non_autorizzato"};
-  const [giocate, saldi, prereg, log] = await Promise.all([
+  const facoltativa = p => p.catch(e => { if (e instanceof Mancante) return null; throw e; });
+  const [giocate, saldi, prereg, log, config, notizie] = await Promise.all([
     leggi("giocate_reali", {select: "*", order: "inizio.asc"}),
     leggi("saldi_reali", {select: "il,disponibile,esposizione,totale", order: "il.desc", limit: 1})
       .catch(e => { if (e instanceof Mancante) return []; throw e; }),
     leggi("preregistrazioni", {select: "valore", chiave: "eq.braccio_reale"}),
     leggi("log_esecuzioni", {select: "eseguito_il,job,esito,righe,dettaglio",
-                             job: "like.reale_*", order: "eseguito_il.desc", limit: 60})
+                             or: "(job.like.reale_*,job.like.carta_*)",
+                             order: "eseguito_il.desc", limit: 80}),
+    // tabelle di sql/automatico.sql: finche' non ci sono, la pagina funziona senza
+    facoltativa(leggi("config_reale", {select: "attivo,modificato_il,modificato_da", id: "eq.1"})),
+    facoltativa(leggi("notizie_giocate", {select: "riferimento,giudizio,forza,motivazione",
+                                          braccio: "eq.reale"}))
   ]);
+  const nz = {};
+  (notizie || []).forEach(n => { nz[n.riferimento] = n; });
   return {stato: "ok", giocate, saldo: saldi[0] || null,
-          pre: (prereg[0] && prereg[0].valore) || {}, log};
+          pre: (prereg[0] && prereg[0].valore) || {}, log,
+          config: config === null ? null : (config[0] || null), notizie: nz};
 }
 
 function calcola(d) {
@@ -337,6 +361,14 @@ function verdetto(c, pre) {
     "Né il criterio per proseguire né quello per fermarsi: la pre-registrazione dice di continuare fino a 300 giocate e poi decidere."];
 }
 
+let NOTIZIE = {};
+function chipNotizie(x) {
+  const n = NOTIZIE[x.chiave];
+  if (!n) return '<span class="piccolo">—</span>';
+  const testo = {contro: "contro", neutre: "neutre", a_favore: "a favore"}[n.giudizio] || n.giudizio;
+  return `<span class="nz ${esc(n.giudizio)}" title="${esc(n.motivazione)}">${testo} ${"·".repeat(n.forza || 1)}</span>`;
+}
+
 function rigaGiocata(x) {
   const q = vuoto(x.quota_abbinata) ? num(x.quota_riferimento)
     : num(x.quota_abbinata) + (Number(x.quota_abbinata) !== Number(x.quota_riferimento)
@@ -362,6 +394,7 @@ function rigaGiocata(x) {
  <td class="n">${vuoto(x.quota_chiusura_it) ? "—" : num(x.quota_chiusura_it)}</td>
  <td class="n ${cls(x.clv)}">${pct(x.clv)}</td>
  <td>${es}</td>
+ <td>${chipNotizie(x)}</td>
  <td class="n ${cls(x.profitto_netto)}">${vuoto(x.profitto_netto) ? "—" : num(x.profitto_netto, 2, true)}</td></tr>`;
 }
 
@@ -369,8 +402,8 @@ function tabellaGiocate(righe, vuotoTesto) {
   return `<div class="tabellone"><table>
   <thead><tr><th>Via</th><th>Lega</th><th>Partita</th><th>Giocata</th><th class="n">Edge</th>
     <th class="n">Quota</th><th class="n">€</th><th class="n">Chiusura</th><th class="n">CLV</th>
-    <th>Esito</th><th class="n">Netto €</th></tr></thead>
-  <tbody>${righe.map(rigaGiocata).join("") || `<tr><td colspan="11" class="vuoto">${vuotoTesto}</td></tr>`}</tbody>
+    <th>Esito</th><th title="Giudizio sulle notizie prima del via: esperimento su carta, non cambia la giocata">Notizie</th><th class="n">Netto €</th></tr></thead>
+  <tbody>${righe.map(rigaGiocata).join("") || `<tr><td colspan="12" class="vuoto">${vuotoTesto}</td></tr>`}</tbody>
 </table></div>`;
 }
 
@@ -391,25 +424,83 @@ function perTurno(g) {
 
 function statoServer(log) {
   const voci = [
+    ["reale_turno", "Ultimo turno automatico", null],
     ["reale_fotografia", "Fotografie delle quote", 3 * 60],
     ["reale_chiusura", "Chiusure (CLV)", null],
     ["reale_contabilizza", "Esiti da Betfair", null],
-    ["carta_btts_contabilizza", "Goal/No Goal su carta", 26 * 60]
+    ["carta_btts_contabilizza", "Esiti Goal/No Goal su carta", 26 * 60]
   ];
   return voci.map(([job, nome, maxMin]) => {
     const r = log.find(x => x.job === job);
     if (!r) return `<div class="box"><div class="l">${nome}</div><div class="d">—</div>
       <div class="l">non ancora eseguito</div></div>`;
     const min = (Date.now() - new Date(r.eseguito_il)) / 60000;
-    const k = r.esito !== "ok" ? " errore" : (maxMin && min > maxMin ? " vecchio" : "");
+    const buono = ["ok", "nessuna"].includes(r.esito);
+    const k = !buono ? (r.esito === "fermo" ? " vecchio" : " errore") : (maxMin && min > maxMin ? " vecchio" : "");
     return `<div class="box${k}"><div class="l">${nome}</div>
       <div class="d">${quando(r.eseguito_il)}</div>
-      <div class="l">${r.esito !== "ok" ? "errore: " + esc((r.dettaglio || "").slice(0, 80)) : fa(r.eseguito_il)}</div></div>`;
+      <div class="l">${!buono ? esc(r.esito) + ": " + esc((r.dettaglio || "").split("\n").filter(Boolean).slice(-1)[0] || "").slice(0, 90)
+        : (r.esito === "nessuna" ? "nessuna giocata · " : "") + fa(r.eseguito_il)}</div></div>`;
   }).join("");
+}
+
+function prossimoTurno(da = new Date()) {
+  // venerdi' 19:00 e martedi' 14:00, ora italiana (il timer sul server)
+  const it = new Date(da.toLocaleString("en-US", FUSO));
+  const scarto = da - it;
+  for (let g = 0; g < 8; g++) {
+    for (const [giorno, ora] of [[5, 19], [2, 14]]) {
+      const c = new Date(it); c.setDate(it.getDate() + g); c.setHours(ora, 0, 0, 0);
+      if (c.getDay() === giorno && c > it) return new Date(c.getTime() + scarto);
+    }
+  }
+  return null;
+}
+
+function sezioneInterruttore(d) {
+  if (d.config === null) return `<div class="interruttore spento"><div>
+    <div class="eyebrow">Turno automatico</div><div class="stato-i off">non configurato</div>
+    <p>Manca la tabella dell'interruttore: va lanciato <code>cloud/sql/automatico.sql</code> nel SQL
+    Editor di Supabase. Finché non c'è, il server non gioca da solo.</p></div></div>`;
+  const on = !!(d.config && d.config.attivo);
+  const pt = prossimoTurno();
+  const quandoPt = pt ? pt.toLocaleString("it-IT", Object.assign({weekday: "long", day: "2-digit",
+    month: "2-digit", hour: "2-digit", minute: "2-digit"}, FUSO)) : "—";
+  const chi = d.config ? `ultima modifica: ${esc(d.config.modificato_da || "—")}, ${quando(d.config.modificato_il, true)}` : "";
+  return `<div class="interruttore${on ? "" : " spento"}" id="interruttore"><div>
+    <div class="eyebrow">Turno automatico · venerdì 19:00 e martedì 14:00</div>
+    <div class="stato-i ${on ? "on" : "off"}">${on ? "acceso" : "spento"}</div>
+    <p>${on ? `Il prossimo turno parte da solo ${esc(quandoPt)} e gioca con soldi veri, con le regole
+      pre-registrate.` : `Il server non piazza giocate con soldi veri. Il Goal/No Goal su carta continua.`}
+      <span class="piccolo">${chi}</span></p></div>
+    <button class="secondario ${on ? "ferma" : "avvia"}" id="cambia" data-attivo="${on ? "1" : "0"}">
+      ${on ? "Spegni" : "Accendi"}</button></div>`;
+}
+
+async function cambiaInterruttore(ev) {
+  const b = ev.currentTarget, accendi = b.dataset.attivo !== "1";
+  const domanda = accendi
+    ? "Accendere il turno automatico? Dal prossimo turno il server gioca da solo con soldi veri."
+    : "Spegnere il turno automatico? Il server non piazzerà più giocate finché non lo riaccendi.";
+  if (!window.confirm(domanda)) return;
+  b.disabled = true;
+  try {
+    const r = await fetch(`${URL_DB}/rest/v1/config_reale?id=eq.1`, {method: "PATCH",
+      headers: {apikey: CHIAVE, Authorization: "Bearer " + await token(),
+                "Content-Type": "application/json", Prefer: "return=representation"},
+      body: JSON.stringify({attivo: accendi})});
+    const j = await r.json().catch(() => null);
+    if (!r.ok || !Array.isArray(j) || !j.length) throw new Error(r.ok ? "modifica non consentita a questo account" : `HTTP ${r.status}`);
+    await carica();
+  } catch (e) {
+    b.disabled = false;
+    alert("Interruttore non cambiato: " + e.message);
+  }
 }
 
 /* ------------------------------------------------------------ pagina */
 function costruisci(d) {
+  NOTIZIE = d.notizie || {};
   const c = calcola(d);
   const pre = d.pre;
   const [vcls, vlab, vtxt] = verdetto(c, pre);
@@ -436,6 +527,8 @@ function costruisci(d) {
       <button class="link" id="ricarica">rileggi</button> · <button class="link" id="esci">esci</button></div>
   </div>
 </header>
+
+${sezioneInterruttore(d)}
 
 <section>
   <div class="shead"><h2>Il criterio: CLV</h2></div>
@@ -558,6 +651,7 @@ async function carica() {
     mostra("pagina");
     $("ricarica").addEventListener("click", carica);
     $("esci").addEventListener("click", esci);
+    if ($("cambia")) $("cambia").addEventListener("click", cambiaInterruttore);
   } catch (e) {
     if (/sessione scaduta|refresh|JWT|401/i.test(String(e.message))) { memoria("cancella"); sessione = null; mostra("accesso"); return; }
     avviso("Non riesco a leggere il database", String(e && e.message || e));

@@ -16,10 +16,14 @@ name: Pengwin — registrazione turno
 
 on:
   schedule:
-    # 07:00 UTC del venerdi' = 09:00 in Italia d'estate, 08:00 d'inverno.
-    # Le quote della fonte escono il venerdi' entro le 17:00 UK: se il turno
-    # esce vuoto e' normale, va rilanciato a mano piu' tardi.
-    - cron: '0 7 * * 5'
+    # Venerdi' sera, dopo che football-data ha pubblicato le quote del weekend
+    # (entro le 17:00 UK: nota 07). 17:47 UTC = 19:47 in Italia d'estate,
+    # 18:47 d'inverno. Il secondo giro alle 20:17 UTC e' un nuovo tentativo:
+    # se il primo ha gia' registrato il turno, predict.py lo vede e non scrive
+    # niente (turno gia' presente); se le quote non c'erano ancora, registra ora.
+    # Dal 10/10/2026: prima era alle 07:00 UTC e trovava le quote vuote.
+    - cron: '47 17 * * 5'
+    - cron: '17 20 * * 5'
   workflow_dispatch:
     inputs:
       solo_anteprima:
@@ -84,10 +88,22 @@ jobs:
       # Il turno programmato del venerdi' registra SEMPRE: `solo_anteprima`
       # esiste solo per i lanci a mano, e la prima condizione lo mette nero su
       # bianco invece di affidarsi a come Actions valuta un input assente.
+      # Il turno programmato usa il controllo strutturale dei dati vecchi
+      # (src/report/freschezza.py): dopo una sosta non si blocca a vuoto, ma
+      # rifiuta se mancano risultati di partite gia' giocate. Nessuna deroga.
       - name: Registra il turno
         if: github.event_name == 'schedule' || inputs.solo_anteprima != true
         run: |
-          if [ "${{ inputs.consenti_dati_vecchi }}" = "true" ]; then
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            set +e
+            python -m src.report.predict --registra --controllo-strutturale
+            rc=$?
+            set -e
+            if [ $rc -eq 2 ]; then
+              echo "::error::Turno NON registrato: mancano risultati di partite gia' giocate."
+            fi
+            exit $rc
+          elif [ "${{ inputs.consenti_dati_vecchi }}" = "true" ]; then
             echo "::warning::Deroga attiva: registrazione con dati vecchi consentita."
             python -m src.report.predict --registra --consenti-dati-vecchi
           else
