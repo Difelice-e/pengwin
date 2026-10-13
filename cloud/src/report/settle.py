@@ -49,6 +49,12 @@ FD_LEGA = {v: k for k, v in LEGA_FD.items()}     # I1 -> Serie_A
 # tolleranza sul giorno quando si aggancia un risultato Understat a una giocata:
 # le due fonti datano diversamente le partite spostate.
 FINESTRA_GIORNI = 5
+# Partite sospese o rinviate: la giocata resta aperta fino al recupero, anche
+# settimane dopo (decisione dell'utente del 13/10/2026, per Vallecano-Bilbao
+# sospesa sullo 0-0). Il risultato si accetta quindi fino a RECUPERO_GIORNI
+# dopo la data prevista: nello stesso campionato e nella stessa stagione la
+# coppia casa-trasferta si incontra una volta sola.
+RECUPERO_GIORNI = 120
 # marcatore in `note` per riconoscere una contabilizzazione provvisoria
 TAG_PROVV = "Understat"
 
@@ -122,7 +128,7 @@ def _risultato_understat(g: dict, idx_us: dict) -> tuple[int, int] | None:
         dr = _data(r.get("datetime"))
         if d0 and dr:
             scarto = abs((dr - d0).days)
-            if scarto > FINESTRA_GIORNI:
+            if not (-FINESTRA_GIORNI <= (dr - d0).days <= max(FINESTRA_GIORNI, RECUPERO_GIORNI)):
                 continue
             if scarto_min is None or scarto < scarto_min:
                 scelta, scarto_min = r, scarto
@@ -131,6 +137,20 @@ def _risultato_understat(g: dict, idx_us: dict) -> tuple[int, int] | None:
     if not scelta or scelta.get("gol_casa") is None or scelta.get("gol_trasferta") is None:
         return None
     return int(scelta["gol_casa"]), int(scelta["gol_trasferta"])
+
+
+def _riga_fd(g: dict, idx_fd: dict, idx_coppia: dict) -> dict | None:
+    """La riga di football-data della giocata: quella del giorno previsto o,
+    se la partita e' stata recuperata dopo, la piu' vicina entro RECUPERO_GIORNI."""
+    r = idx_fd.get((g["lega"], g["data_partita"], g["casa"], g["trasferta"]))
+    if r:
+        return r
+    d0 = _data(g["data_partita"])
+    if d0 is None:
+        return None
+    cand = [x for x in idx_coppia.get((g["lega"], g["casa"], g["trasferta"]), [])
+            if (dx := _data(x["data"])) and 0 < (dx - d0).days <= RECUPERO_GIORNI]
+    return min(cand, key=lambda x: _data(x["data"])) if cand else None
 
 
 def main(argv=None) -> int:
@@ -161,6 +181,9 @@ def main(argv=None) -> int:
                            "q_max_1,q_max_x,q_max_2,q_max_over25,q_max_under25",
                    filtri={"data": f"gte.{da}", "gol_casa": "not.is.null"})
     idx_fd = {(r["lega"], r["data"], r["casa"], r["trasferta"]): r for r in fd}
+    idx_coppia: dict = {}
+    for r in fd:
+        idx_coppia.setdefault((r["lega"], r["casa"], r["trasferta"]), []).append(r)
 
     us = db.select("xg_partite",
                    colonne="lega_us,datetime,casa,trasferta,gol_casa,gol_trasferta",
@@ -175,7 +198,7 @@ def main(argv=None) -> int:
     # ---- FASE 1 : giocate aperte -----------------------------------------
     n_fd = n_us = in_attesa = senza_chiusura = 0
     for g in aperte:
-        r = idx_fd.get((g["lega"], g["data_partita"], g["casa"], g["trasferta"]))
+        r = _riga_fd(g, idx_fd, idx_coppia)
         if r:
             u = _da_football_data(g, r, ora)
             if u is None:
@@ -198,7 +221,7 @@ def main(argv=None) -> int:
     n_clv = n_rettifiche = provv_restanti = 0
     for g in da_completare:
         provvisoria = TAG_PROVV in (g.get("note") or "")
-        r = idx_fd.get((g["lega"], g["data_partita"], g["casa"], g["trasferta"]))
+        r = _riga_fd(g, idx_fd, idx_coppia)
         u = _da_football_data(g, r, ora) if r else None
         if u is None or u["clv"] is None:
             if provvisoria:
