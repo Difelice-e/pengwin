@@ -11,9 +11,18 @@ name: Pengwin — aggiornamento e contabilizzazione
 
 on:
   schedule:
-    # 06:00 UTC = 08:00 in Italia d'estate, 07:00 d'inverno (il cron di GitHub
-    # e' sempre UTC e non segue l'ora legale).
-    - cron: '0 6 * * *'
+    # Il cron di GitHub e' sempre UTC e non segue l'ora legale.
+    # Fino al 13/10/2026 c'era solo '0 6 * * *': GitHub lo faceva partire con
+    # 4-8 ore di ritardo (fra le 12 e le 16:30 italiane), perche' l'inizio
+    # dell'ora e' il momento piu' affollato. Ora:
+    #  - 05:23 UTC, un minuto meno affollato: i risultati della sera prima;
+    #  - 23:37 UTC: dopo la pubblicazione di football-data (il lunedi' intorno
+    #    alle 22:45 UTC), cosi' CLV e Goal/No Goal sono pronti il mattino dopo.
+    # Il giro serale salta il venerdi': il turno (17:47 e 20:17 UTC) e' nello
+    # stesso gruppo di concorrenza, e un terzo lavoro in coda puo' far
+    # annullare quello in attesa.
+    - cron: '23 5 * * *'
+    - cron: '37 23 * * 0-4,6'
   workflow_dispatch:        # permette di lanciarlo a mano dalla tab Actions
 
 concurrency:
@@ -63,3 +72,8 @@ jobs:
       # contabilizzerebbe su risultati non aggiornati.
       - name: Contabilizza le giocate concluse
         run: python -m src.report.settle --scrivi
+
+      # Goal/No Goal su carta: stessi risultati appena caricati, con Understat
+      # come ripiego (prima aspettava football-data, cioe' 3-4 giorni).
+      - name: Contabilizza il Goal/No Goal su carta
+        run: python -m src.report.settle_btts --scrivi
