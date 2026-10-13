@@ -4,6 +4,7 @@ Braccio SU CARTA Goal/No Goal (BTTS) ai prezzi di betfair.it. Nessun denaro.
     python -m src.reale.carta_btts                      # anteprima, non scrive
     python -m src.reale.carta_btts --registra           # registra le giocate su carta del turno
     python -m src.reale.carta_btts --contabilizza       # esiti delle partite concluse (timer)
+    python -m src.reale.carta_btts --contabilizza --prova   # Betfair contro esiti registrati, non scrive
     python -m src.reale.carta_btts --auto               # registra, dal turno automatico
 
 Con --auto i dati vecchi si giudicano con il controllo strutturale
@@ -46,6 +47,12 @@ LEGHE = ("E0", "I1", "SP1", "D1", "F1")
 BANKROLL_VIRTUALE = 400.0
 TABELLA = "carta_btts"
 SELEZIONI = {"yes": "gg", "no": "ng"}
+RECUPERO_GIORNI = 120
+# Esiti da Betfair: il mercato Goal/No Goal si regola pochi minuti dopo il
+# fischio finale. Prima di 1 ora e 45 dal via non vale la pena chiedere; dopo
+# 3 giorni Betfair non cambia piu' niente e restano i risultati (recuperi).
+ATTESA_BETFAIR = timedelta(hours=1, minutes=45)
+FINESTRA_BETFAIR = timedelta(days=3)
 
 
 def candidati_btts(cat: list[dict], book: dict[str, dict], probabilita, adesso: datetime,
@@ -113,10 +120,13 @@ def profitto(esito_: str, stake: float, quota: float) -> float:
 
 
 def risultato(partite: list[dict], data_partita: str) -> dict | None:
-    """La partita giocata piu' vicina alla data prevista, entro 3 giorni (rinvii brevi)."""
+    """La partita giocata piu' vicina alla data prevista: da 3 giorni prima a
+    RECUPERO_GIORNI dopo. Le partite sospese o rinviate restano aperte fino al
+    recupero (decisione dell'utente del 13/10/2026, Vallecano-Bilbao): nella
+    stessa stagione la coppia casa-trasferta si incontra una volta sola."""
     prevista = date.fromisoformat(data_partita)
     giocate = [p for p in partite if p.get("gol_casa") is not None
-               and abs((date.fromisoformat(p["data"]) - prevista).days) <= 3]
+               and -3 <= (date.fromisoformat(p["data"]) - prevista).days <= RECUPERO_GIORNI]
     if not giocate:
         return None
     return min(giocate, key=lambda p: abs((date.fromisoformat(p["data"]) - prevista).days))
@@ -141,6 +151,91 @@ def chiusura_da_fotografia(db, r: dict) -> dict:
     back = float(f[0]["back"])
     return {"quota_chiusura": back, "chiusura_il": f[0]["il"], "chiusura_fonte": "fotografia",
             "clv": round(float(r["quota"]) / back - 1, 6)}
+
+
+def da_regolare_betfair(db, adesso: datetime) -> list[dict]:
+    """Aperte, iniziate da oltre ATTESA_BETFAIR e da meno di FINESTRA_BETFAIR."""
+    try:
+        righe = db.select(TABELLA, colonne="*", filtri={
+            "esito": "is.null", "inizio": f"lt.{(adesso - ATTESA_BETFAIR).isoformat()}"})
+    except Exception:                                        # noqa: BLE001
+        return []
+    return [r for r in righe if datetime.fromisoformat(r["inizio"].replace("Z", "+00:00"))
+            > adesso - FINESTRA_BETFAIR]
+
+
+def stati_betfair(s, market_ids: list[str]) -> dict[str, dict]:
+    """marketId -> {"status": stato del mercato, "runners": {selectionId: stato}}.
+
+    Un mercato regolato e' CLOSED e i suoi runner sono WINNER o LOSER. Qualunque
+    altra cosa (ancora aperto, sospeso, runner REMOVED, mercato non restituito)
+    vuol dire: Betfair non ha deciso, si aspetta o si usa il risultato."""
+    out: dict[str, dict] = {}
+    for i in range(0, len(market_ids), 40):
+        for m in api.rpc(s, "listMarketBook", {"marketIds": market_ids[i:i + 40]}):
+            out[m["marketId"]] = {
+                "status": m.get("status"),
+                "runners": {int(r["selectionId"]): r.get("status") for r in m.get("runners", [])}}
+    return out
+
+
+def esito_betfair(r: dict, stati: dict[str, dict]) -> str | None:
+    m = stati.get(r["market_id"])
+    if not m or m.get("status") != "CLOSED":
+        return None
+    st = m["runners"].get(int(r["selection_id"]))
+    return {"WINNER": "vinta", "LOSER": "persa"}.get(st)
+
+
+def contabilizza_betfair(s, db, righe: list[dict], adesso: datetime,
+                         scrivi: bool = True) -> tuple[int, int]:
+    """Esiti dal mercato Betfair, come per le giocate reali: fa fede Betfair.
+
+    I gol li aggiunge dopo il giro di GitHub (src/report/settle_btts.py), che
+    segnala come errore un risultato che contraddice Betfair."""
+    stati = stati_betfair(s, sorted({r["market_id"] for r in righe}))
+    fatte, attesa = 0, 0
+    for r in righe:
+        e = esito_betfair(r, stati)
+        if e is None:
+            attesa += 1
+            continue
+        valori = {"esito": e, "profitto_netto": profitto(e, float(r["stake"]), float(r["quota"])),
+                  "contabilizzata_il": adesso.isoformat()}
+        if r.get("quota_chiusura") is None:
+            valori.update(chiusura_da_fotografia(db, r))
+        print(f"  #{r['id']} {r['casa']} - {r['trasferta']} {r['selezione']} -> {e} "
+              f"netto {valori['profitto_netto']:+.2f} [Betfair]")
+        if scrivi:
+            db.update(TABELLA, {"id": f"eq.{r['id']}"}, valori)
+        fatte += 1
+    return fatte, attesa
+
+
+def prova_betfair(s, db, adesso: datetime, giorni: int = 7) -> int:
+    """Confronta il verdetto di Betfair con gli esiti gia' registrati. Non scrive."""
+    righe = db.select(TABELLA, colonne="*", filtri={
+        "inizio": f"gt.{(adesso - timedelta(days=giorni)).isoformat()}"})
+    righe = [r for r in righe
+             if datetime.fromisoformat(r["inizio"].replace("Z", "+00:00")) < adesso - ATTESA_BETFAIR]
+    if not righe:
+        print("nessuna giocata Goal/No Goal concluse negli ultimi giorni")
+        return 0
+    stati = stati_betfair(s, sorted({r["market_id"] for r in righe}))
+    uguali = diverse = 0
+    for r in righe:
+        m = stati.get(r["market_id"])
+        st = m["runners"].get(int(r["selection_id"])) if m else None
+        e = esito_betfair(r, stati)
+        confronto = ("" if r["esito"] is None or e is None
+                     else (" = registrato" if e == r["esito"] else f" ≠ registrato {r['esito']}"))
+        uguali += confronto == " = registrato"
+        diverse += confronto.startswith(" ≠")
+        print(f"  #{r['id']} {r['casa']} - {r['trasferta']} {r['selezione']}: mercato "
+              f"{m['status'] if m else 'non restituito'}, runner {st} -> {e or 'nessun esito'}"
+              f"{confronto}")
+    print(f"Betfair concorda con gli esiti registrati su {uguali}, discorda su {diverse}")
+    return 1 if diverse else 0
 
 
 def contabilizza(db, adesso: datetime | None = None) -> int:
@@ -168,7 +263,9 @@ def contabilizza(db, adesso: datetime | None = None) -> int:
         db.update(TABELLA, {"id": f"eq.{r['id']}"}, valori)
         fatte += 1
     print(f"Goal/No Goal su carta: contabilizzate {fatte}, in attesa del risultato {in_attesa}")
-    db.log("carta_btts_contabilizza", "ok", fatte, f"{in_attesa} in attesa")
+    # il timer gira ogni 30 minuti: nel log solo i giri che hanno chiuso qualcosa
+    if fatte:
+        db.log("carta_btts_contabilizza", "ok", fatte, f"risultati: {in_attesa} in attesa")
     return 0
 
 
@@ -176,6 +273,8 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="Braccio su carta Goal/No Goal (betfair.it)")
     ap.add_argument("--registra", action="store_true", help="scrive le giocate su carta")
     ap.add_argument("--contabilizza", action="store_true", help="esiti delle partite concluse")
+    ap.add_argument("--prova", action="store_true",
+                    help="con --contabilizza: confronta Betfair con gli esiti registrati, non scrive")
     ap.add_argument("--consenti-dati-vecchi", action="store_true", dest="consenti_dati_vecchi")
     ap.add_argument("--giorni", type=float, default=4)
     ap.add_argument("--auto", action="store_true",
@@ -187,6 +286,21 @@ def main(argv=None) -> int:
     api.carica_env()
     db = client()
     if a.contabilizza:
+        adesso = datetime.now(timezone.utc)
+        righe = [] if a.prova else da_regolare_betfair(db, adesso)
+        if righe or a.prova:                 # senza lavoro, nessun login a Betfair
+            try:
+                s = api.sessione()
+                if a.prova:
+                    return prova_betfair(s, db, adesso)
+                fatte, attesa = contabilizza_betfair(s, db, righe, adesso)
+                print(f"Goal/No Goal da Betfair: {fatte} chiuse, {attesa} non ancora regolate")
+                if fatte:
+                    db.log("carta_btts_contabilizza", "ok", fatte,
+                           f"Betfair: {fatte} chiuse, {attesa} non ancora regolate")
+            except Exception as e:           # noqa: BLE001  restano i risultati
+                print(f"[!] Betfair non disponibile ({e}): si usano i risultati")
+                db.log("carta_btts_contabilizza", "errore", 0, f"Betfair: {e}"[:500])
         return contabilizza(db)
 
     # import qui: il modello serve solo per la selezione, non per contabilizzare

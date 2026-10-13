@@ -1,8 +1,11 @@
 [Unit]
-Description=Pengwin - contabilizzazione Goal/No Goal su carta, ogni giorno dopo l'ingest dei risultati
+Description=Pengwin - esiti Goal/No Goal su carta, ogni 30 minuti (Betfair, poi risultati)
 
 [Timer]
-OnCalendar=*-*-* 16:15:00
+# Dal 13/10/2026 ogni 30 minuti, sfasato rispetto agli esiti reali (:10 e :40):
+# gli esiti si leggono dal mercato Betfair appena e' regolato. Senza giocate
+# da chiudere non fa nemmeno il login. Prima: una volta al giorno alle 16:15.
+OnCalendar=*-*-* *:25,55:00
 Persistent=true
 
 [Install]

@@ -166,5 +166,133 @@ class DBSenzaTabella(DBChiusura):
 check("chiusura: tabella carta assente, nessun errore", 0,
       quote.chiusura(DBSenzaTabella([]), lambda: None, ADESSO))
 
+# --- recupero di una partita sospesa (decisione del 13/10) --------------------------
+PARTITE = [{"data": "2026-11-04", "gol_casa": 1, "gol_trasferta": 1}]
+check("risultato: recupero 25 giorni dopo accettato", PARTITE[0],
+      carta_btts.risultato(PARTITE, "2026-10-10"))
+check("risultato: oltre 120 giorni no", None,
+      carta_btts.risultato([{"data": "2027-03-01", "gol_casa": 1, "gol_trasferta": 1}], "2026-10-10"))
+check("risultato: non giocata (senza gol) no", None,
+      carta_btts.risultato([{"data": "2026-10-10", "gol_casa": None, "gol_trasferta": None}],
+                           "2026-10-10"))
+
+
+# --- esiti da Betfair -----------------------------------------------------------------
+ORA = datetime(2026, 10, 10, 20, 0, tzinfo=timezone.utc)
+STATI = {
+    "1.1": {"marketId": "1.1", "status": "CLOSED", "runners": [            # Goal vinto
+        {"selectionId": 30246, "status": "WINNER"}, {"selectionId": 30247, "status": "LOSER"}]},
+    "1.2": {"marketId": "1.2", "status": "CLOSED", "runners": [            # No Goal perso
+        {"selectionId": 30246, "status": "WINNER"}, {"selectionId": 30247, "status": "LOSER"}]},
+    "1.3": {"marketId": "1.3", "status": "OPEN", "inplay": True, "runners": [   # in corso
+        {"selectionId": 30246, "status": "ACTIVE"}, {"selectionId": 30247, "status": "ACTIVE"}]},
+    "1.4": {"marketId": "1.4", "status": "CLOSED", "runners": [            # partita annullata
+        {"selectionId": 30246, "status": "REMOVED"}, {"selectionId": 30247, "status": "REMOVED"}]},
+    # 1.5: Betfair non lo restituisce
+}
+CHIAMATE_BF = []
+
+
+def rpc_bf(s, metodo, params):
+    CHIAMATE_BF.append((metodo, params))
+    assert metodo == "listMarketBook", metodo
+    return [STATI[m] for m in params["marketIds"] if m in STATI]
+
+
+api.rpc = rpc_bf
+
+
+def rb(i, market, sel, ore_fa, esito=None, quota=2.0, stake=4.0, chiusura=1.9):
+    return {"id": i, "market_id": market, "selection_id": sel,
+            "selezione": "gg" if sel == 30246 else "ng", "quota": quota, "stake": stake,
+            "casa": f"Casa{i}", "trasferta": "Ospite", "lega": "E0", "data_partita": "2026-10-10",
+            "inizio": (ORA - timedelta(hours=ore_fa)).isoformat(), "esito": esito,
+            "quota_chiusura": chiusura}
+
+
+class DBBetfair:
+    def __init__(self, righe):
+        self.righe = {r["id"]: dict(r) for r in righe}
+        self.update_fatti, self.logs = [], []
+
+    def select(self, tabella, colonne="*", filtri=None, ordina=None, limite=None):
+        assert tabella in ("carta_btts", "quote_snapshot", "partite"), tabella
+        if tabella == "quote_snapshot":
+            return [{"il": "2026-10-10T13:00:00+00:00", "back": 2.10}]
+        if tabella == "partite":
+            return []
+        righe = list(self.righe.values())
+        if filtri and filtri.get("esito") == "is.null":
+            righe = [r for r in righe if r["esito"] is None]
+        if filtri and str(filtri.get("inizio", "")).startswith("lt."):
+            soglia = datetime.fromisoformat(filtri["inizio"][3:])
+            righe = [r for r in righe if datetime.fromisoformat(r["inizio"]) < soglia]
+        if filtri and str(filtri.get("inizio", "")).startswith("gt."):
+            soglia = datetime.fromisoformat(filtri["inizio"][3:])
+            righe = [r for r in righe if datetime.fromisoformat(r["inizio"]) > soglia]
+        return [dict(r) for r in righe]
+
+    def update(self, tabella, filtro, valori):
+        self.update_fatti.append((tabella, filtro, valori))
+        self.righe[int(filtro["id"][3:])].update(valori)
+
+    def log(self, *a):
+        self.logs.append(a)
+
+
+dbb = DBBetfair([rb(1, "1.1", 30246, 3), rb(2, "1.2", 30247, 3, quota=2.5),
+                 rb(3, "1.3", 30246, 2), rb(4, "1.4", 30247, 3), rb(5, "1.5", 30246, 3),
+                 rb(6, "1.1", 30246, 1),                            # iniziata da 1 ora
+                 rb(7, "1.1", 30246, 80),                           # oltre 3 giorni
+                 rb(8, "1.1", 30246, 3, esito="vinta"),             # gia' chiusa
+                 rb(9, "1.1", 30246, 3, chiusura=None)])            # senza chiusura
+sel = carta_btts.da_regolare_betfair(dbb, ORA)
+check("Betfair: da chiedere solo fra 1h45 e 3 giorni dal via, senza esito",
+      [1, 2, 3, 4, 5, 9], sorted(r["id"] for r in sel))
+fatte, attesa = carta_btts.contabilizza_betfair(None, dbb, sel, ORA)
+check("Betfair: 3 chiuse, 3 in attesa", (3, 3), (fatte, attesa))
+check("Betfair: una sola chiamata, mercati senza doppioni", [["1.1", "1.2", "1.3", "1.4", "1.5"]],
+      [p["marketIds"] for _, p in CHIAMATE_BF])
+check("Betfair: Goal su WINNER -> vinta, +4 x 1 x 0,955", ("vinta", 3.82),
+      (dbb.righe[1]["esito"], dbb.righe[1]["profitto_netto"]))
+check("Betfair: No Goal su LOSER -> persa, -4", ("persa", -4.0),
+      (dbb.righe[2]["esito"], dbb.righe[2]["profitto_netto"]))
+check("Betfair: mercato aperto, annullato o assente -> resta aperta", [None, None, None],
+      [dbb.righe[i]["esito"] for i in (3, 4, 5)])
+check("Betfair: i gol non si scrivono (li aggiunge GitHub)", None, dbb.righe[1].get("gol_casa"))
+check("Betfair: senza chiusura, ripiego sulla fotografia", (2.10, "fotografia"),
+      (dbb.righe[9].get("quota_chiusura"), dbb.righe[9].get("chiusura_fonte")))
+CHIAMATE_BF.clear()
+dbp = DBBetfair([rb(1, "1.1", 30246, 3, esito="vinta"), rb(2, "1.2", 30247, 3, esito="vinta")])
+check("prova: una discordanza -> uscita 1, niente scritto", (1, []),
+      (carta_btts.prova_betfair(None, dbp, ORA), dbp.update_fatti))
+
+# main --contabilizza: senza giocate nella finestra di Betfair, nessun login
+login = []
+api.sessione = lambda: login.append(1) or object()
+api.carica_env = lambda: None
+dbm = DBBetfair([rb(7, "1.1", 30246, 80)])
+carta_btts.client = lambda: dbm
+carta_btts.datetime = type("D", (datetime,), {"now": staticmethod(lambda tz=None: ORA)})
+check("main --contabilizza senza lavoro per Betfair: nessun login", (0, []),
+      (carta_btts.main(["--contabilizza"]), login))
+dbm = DBBetfair([rb(1, "1.1", 30246, 3)])
+check("main --contabilizza: login e chiusa da Betfair", (0, [1], "vinta"),
+      (carta_btts.main(["--contabilizza"]), login, dbm.righe[1]["esito"]))
+check("main --contabilizza: nel log 'Betfair: 1 chiuse'", True,
+      any("Betfair: 1 chiuse" in str(l) for l in dbm.logs))
+
+
+def rpc_rotto(s, metodo, params):
+    raise RuntimeError("TOO_MUCH_DATA")
+
+
+api.rpc = rpc_rotto
+dbm = DBBetfair([rb(1, "1.1", 30246, 3)])
+check("main --contabilizza: Betfair in errore -> uscita 0, errore nel log, resta aperta",
+      (0, True, None),
+      (carta_btts.main(["--contabilizza"]), any(l[1] == "errore" for l in dbm.logs),
+       dbm.righe[1]["esito"]))
+
 print(f"\n{sum(esiti)}/{len(esiti)} verifiche superate")
 sys.exit(0 if all(esiti) else 1)

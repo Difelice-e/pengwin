@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Attiva i timer del server: turno automatico (venerdi' 19:00, martedi' 14:00),
 # fotografie delle quote (ogni 2 ore), chiusura (ogni 5 minuti), esiti delle
-# giocate reali (ogni 30 minuti) e del Goal/No Goal su carta (ogni giorno).
+# giocate reali (ogni 30 minuti) e del Goal/No Goal su carta (ogni 30 minuti).
 # Imposta anche il riavvio automatico notturno dopo gli aggiornamenti. Da lanciare come root DOPO che la prova di connessione
 # e' riuscita e ~pengwin/.betfair/betfair.env contiene anche SUPABASE_KEY.
 #

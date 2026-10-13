@@ -1,5 +1,5 @@
 [Unit]
-Description=Pengwin - contabilizzazione del Goal/No Goal su carta (nessun denaro)
+Description=Pengwin - esiti del Goal/No Goal su carta da Betfair e dai risultati (nessun denaro, chiave Delayed)
 After=network-online.target
 Wants=network-online.target
 
