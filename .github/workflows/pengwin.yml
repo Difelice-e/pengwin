@@ -64,7 +64,12 @@ jobs:
       - name: Risultati e quote (football-data)
         run: python -m src.ingest.football_data --stagioni 2627 --fixtures --carica
 
+      # Gli xG non servono a contabilizzare: un Understat fermo non deve
+      # bloccare gli esiti delle giocate su carta (dal 2/11/2026 li bloccava).
+      # Il guasto resta visibile: l'ingest scrive «parziale» in log_esecuzioni,
+      # il riepilogo del mattino lo segnala e i turni lo rifiutano.
       - name: xG (Understat)
+        continue-on-error: true
         run: python -m src.ingest.understat --stagioni 2026 --carica
 
       # settle non tocca mai una giocata gia' contabilizzata: e' rilanciabile.
