@@ -14,6 +14,7 @@ e che nel frame del modello non c'e', con il risultato, e' un buco nei dati.
   rinvio, che altrimenti bloccherebbe il campionato per settimane.
 - Gli ingest di football-data e Understat devono essere riusciti nelle ultime
   30 ore: se la pipeline quotidiana e' ferma, il turno non si gioca.
+  Eccezione a tempo per la sola Understat: src/report/ripiego_xg.py (nota 25).
 
 Funziona con qualunque frame prodotto da `src.report.dataset.carica`
 (colonne Div, MatchDate, HomeTeam, AwayTeam con i nomi football-data).
@@ -85,10 +86,28 @@ def ingest_fermi(db, adesso: datetime) -> list[str]:
 
 
 def controlla(db, d: pd.DataFrame, leghe, adesso: datetime | None = None) -> list[str]:
-    """Motivi per cui i dati NON sono utilizzabili. Lista vuota = si puo' giocare."""
+    """Motivi per cui i dati NON sono utilizzabili. Lista vuota = si puo' giocare.
+
+    Unica deroga: con il ripiego attivo (src/report/ripiego_xg.py) l'ingest
+    Understat fermo non e' un motivo, perche' le partite che mancherebbero hanno
+    gli xG di football-data. Il controllo del calendario resta com'e': se il
+    ripiego non le copre, le partite risultano mancanti e il turno si rifiuta.
+    """
     adesso = adesso or datetime.now(timezone.utc)
+    fermi = ingest_fermi(db, adesso)
+    if "ingest_understat" in fermi:
+        from src.report import ripiego_xg       # import qui: ripiego_xg importa questo modulo
+        st = ripiego_xg.stato(db, adesso)
+        if st.attivo:
+            fermi.remove("ingest_understat")
+            fd = d[d["fonte_xg"] == "fd"] if "fonte_xg" in d else d.iloc[0:0]
+            per_lega = ", ".join(f"{k} {v}" for k, v in fd.groupby("Div").size().items())
+            print(f"dati: RIPIEGO xG football-data (turno degradato, deroga fino al "
+                  f"{ripiego_xg.SCADENZA:%d/%m}): {st.motivo}; {len(fd)} partite dal "
+                  f"{st.dal:%d/%m} con xG football-data corretti"
+                  + (f" ({per_lega})" if per_lega else ""))
     motivi = [f"{job}: nessuna esecuzione riuscita nelle ultime "
-              f"{INGEST_MAX.total_seconds() / 3600:.0f} ore" for job in ingest_fermi(db, adesso)]
+              f"{INGEST_MAX.total_seconds() / 3600:.0f} ore" for job in fermi]
     for lega, buchi in mancanti(leggi_calendario(db, adesso, leghe), d, leghe).items():
         if len(buchi) > TOLLERATE:
             motivi.append(f"{lega}: {len(buchi)} partite gia' giocate senza risultato nei dati "

@@ -32,3 +32,6 @@ jobs:
 
       - name: Quote Betfair — commissione, stake, aggancio
         run: python tests/betfair.py
+
+      - name: xG — aggancio Understat e ripiego su football-data
+        run: python tests/ripiego_xg.py
