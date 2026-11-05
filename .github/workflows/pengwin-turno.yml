@@ -74,7 +74,13 @@ jobs:
       - name: Risultati e quote (football-data)
         run: python -m src.ingest.football_data --stagioni 2627 --fixtures --carica
 
+      # Un ingest Understat fallito non ferma il job: a decidere se i dati
+      # bastano e' il controllo strutturale di predict (src/report/freschezza.py),
+      # che rifiuta comunque se Understat e' fermo, salvo il ripiego a tempo di
+      # src/report/ripiego_xg.py (nota di progetto 25). Prima il job si fermava
+      # qui e il controllo non arrivava mai a decidere.
       - name: xG (Understat)
+        continue-on-error: true
         run: python -m src.ingest.understat --stagioni 2026 --carica
 
       - name: Contabilizza le giocate concluse
